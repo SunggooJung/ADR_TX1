@@ -117,20 +117,6 @@ void ZedOdom(const nav_msgs::Odometry& zed_odom_msg)
     Odom_zed.z = zed_odom_msg.pose.pose.position.z;
 }
 
-void callback_serial_comm(const std_msgs::Float32MultiArray &msg)
-{
-    img.pos_error_pixel[0] 		 = msg.data[0];
-    img.pos_error_pixel[1] 		 = msg.data[2];
-    img.pos_error_pixel[2] 		 = msg.data[1];
-    img.pos_error_pixel[3] 		 = msg.data[3];
-    img.pos_error_pixel[4] 		 = msg.data[4];
-    img.pos_error_pixel[5] 		 = msg.data[5];
-    r_data 		 = 0.0;
-
-    float div_x = -12.34*pow(img.pos_error_pixel[1],2) + 121.6*img.pos_error_pixel[1] -336.1;
-    pos_error_x_m = -img.pos_error_pixel[0] / div_x;
-}
-
 int main(int argc, char** argv)
 {
     static FILE* pFile;
@@ -154,13 +140,9 @@ int main(int argc, char** argv)
 	// for debugging
 	printf("Initiate: FCC_Serial_node\n");
 
-	// subscribing the image processing results (x_pos, y_pos)
-    Subscriber msg_data_input  = nh_.subscribe("/obstacle/center_info", 4, callback_serial_comm);
-    Subscriber zed_odom_sub_ = nh_.subscribe("/zed/odom", 1, &ZedOdom);
-    Publisher  imu_pub = nh_.advertise<sensor_msgs::Imu>("imu/data_raw", 1000);
-    Publisher  pose_down_pub = nh_.advertise<std_msgs::Float32MultiArray>("pose_down/data_raw", 100);
-    Publisher  opt_flow_pub = nh_.advertise<geometry_msgs::Twist>("camera/opt_flow", 1);
-    Publisher  obs_through_pub = nh_.advertise<std_msgs::Int8MultiArray>("/fcc/obs_data", 100);
+	// subscribing the image processing results (x_pos, y_pos)   
+        Subscriber zed_odom_sub_ = nh_.subscribe("/odom", 1, &ZedOdom);
+        Publisher  imu_pub = nh_.advertise<sensor_msgs::Imu>("imu/data_raw", 1000);
 
 	receive_data.data.resize(10);
 
@@ -184,19 +166,11 @@ int main(int argc, char** argv)
 		exit(0);
 	}
 
-#ifdef LOG_SPECIFY
-    // node loop, for ROS, check ros status, ros::ok()
-    sprintf(OutFileName,"/home/ubuntu/catkin_ws/src/fcc_serial/src/%s", "ODOM");
-    pFile = fopen(strcat(OutFileName, ".out"), "w+t");
-#endif
-
 	while( ok() )
-    {
+        {
         /// messages
         sensor_msgs::Imu imu_msg;
-        std_msgs::Float32MultiArray pose_down_msg;
-        geometry_msgs::Twist opt_flow_msg;
-        std_msgs::Int8MultiArray obs_through_msg;
+
 
         /// Imu data read fcc -> Tk1
         imu_msg.header.stamp = ros::Time::now();
@@ -219,30 +193,8 @@ int main(int argc, char** argv)
 
         imu_msg.linear_acceleration.x = StrRXttyO.Cur_LinAccAED_mpss[1];
         imu_msg.linear_acceleration.y = StrRXttyO.Cur_LinAccAED_mpss[0];
-        imu_msg.linear_acceleration.z = StrRXttyO.Cur_LinAccAED_mpss[2];
+        imu_msg.linear_acceleration.z = StrRXttyO.Cur_LinAccAED_mpss[2];        
 
-        /// Lidar altimeter & barometer altitude data read fcc -> tk1
-        pose_down_msg.data.clear();
-        pose_down_msg.data.resize(3);
-        pose_down_msg.data[0] = StrRXttyO.LidarPosDown_m;
-        pose_down_msg.data[1] = StrRXttyO.SonarPosDown_m;
-        pose_down_msg.data[2] = StrRXttyO.BaroPosDown_m;
-
-        t_cur = count_ros / 20.0;
-
-        /// Optical flow data read
-        opt_flow_msg.linear.x = StrRXttyO.FlowXY_mps[0];
-        opt_flow_msg.linear.y = StrRXttyO.FlowXY_mps[1];
-
-        obs_through_msg.data.clear();
-        obs_through_msg.data.resize(4);
-        obs_through_msg.data[0] = StrRXttyO.Mode_FlightMode;
-        obs_through_msg.data[1] = gate_num;
-        obs_through_msg.data[2] = (int)(StrRXttyO.LidarPosDown_m*10.0);
-        obs_through_msg.data[3] = turn_check;
-
-        cout << gate_num << "  " << count_mission_start << "\n";
-        cout <<StrRXttyO.SonarPosDown_m<<"  "<<StrRXttyO.LidarPosDown_m << "\n";
 
         if (StrRXttyO.Mode_FlightMode == 1)
         {
@@ -333,144 +285,8 @@ int main(int argc, char** argv)
                 t_rel = 0.0;
                 time_flag = 0;
             }
-///------------------------------------------------------------------------------------------------------------------
-            if(count_mission_start < 3*SECOND)
-            {
-                cmd.X_out = Kp_x*pos_error_x_m - opt_flow_msg.linear.x*Kd_x ;
-                cmd.Y_out = -0.05;
-                cmd.Z_out = posZ_error*Kp_z;
-                cmd.PSI_out = Kp_psi*psi_error*1.0;
-                gate_num = 0;
-            }
-
-            else flag_gate_init = 0;
-
-            if (gate_num == 1 )
-            {
-                count_fwd = count_fwd + 1;
-
-                if(count_fwd < 1.5*SECOND)
-                {
-                    cmd.X_out = 0.6;
-                    cmd.Y_out = 0.1;
-                    cmd.Z_out = posZ_error*Kp_z;
-                    cmd.PSI_out = Kp_psi*psi_error*1.0;
-                    flag_gate_init = 1;
-                }
-
-                else if(count_fwd > 1.0*SECOND && count_fwd < 3.0*SECOND)
-                {
-                    cmd.X_out = Kp_x*pos_error_x_m - opt_flow_msg.linear.x*Kd_x ;
-                    cmd.Y_out = 0.0;
-                    cmd.Z_out = posZ_error*Kp_z;
-                    cmd.PSI_out = Kp_psi*psi_error*1.0;
-                    flag_gate_init = 1;
-                }
-
-                else flag_gate_init = 0;
-            }
-
-            if (gate_num == 2 )
-            {
-                count_fwd = count_fwd + 1;
-
-                if(count_fwd < 1.0*SECOND)
-                {
-                    cmd.X_out = -0.5;
-                    cmd.Y_out = 0.1;
-                    cmd.Z_out = posZ_error*Kp_z;
-                    cmd.PSI_out = Kp_psi*psi_error*1.0;
-                    flag_gate_init = 1;
-                }
-
-                else if(count_fwd > 1.0*SECOND && count_fwd < 3.0*SECOND)
-                {
-                    cmd.X_out = Kp_x*pos_error_x_m - opt_flow_msg.linear.x*Kd_x ;
-                    cmd.Y_out = 0.0;
-                    cmd.Z_out = posZ_error*Kp_z;
-                    cmd.PSI_out = Kp_psi*psi_error*1.0;
-                    flag_gate_init = 1;
-                }
-
-                else flag_gate_init = 0;
-            }
-/*
-            if (gate_num == 2)
-            {
-                count_fwd = count_fwd + 1;
-                if(count_fwd < 1.5*SECOND)
-                {
-                    cmd.X_out = 0.2 ;
-                    cmd.Y_out = 0.0;
-                    cmd.Z_out = posZ_error*Kp_z;
-                    cmd.PSI_out = Kp_psi*psi_error*1.0;
-                }
-
-                else if(count_fwd > 1.5*SECOND && count_fwd < 4.5*SECOND)
-                {
-                    cmd.X_out = 0.0;
-                    cmd.Y_out = -0.3;
-                    cmd.Z_out = posZ_error*Kp_z;
-                    cmd.PSI_out = Kp_psi*psi_error*1.0;
-                }
-
-                else if(count_fwd > 4.5*SECOND && count_fwd > 6.0*SECOND)
-                {
-                    cmd.X_out = -0.2;
-                    cmd.Y_out = 0.0;
-                    cmd.Z_out = posZ_error*Kp_z;
-                    cmd.PSI_out = Kp_psi*psi_error*1.0;                    
-                }
-
-                else if(count_fwd > 6.0*SECOND)
-                {
-                    cmd.X_out = 0.0;
-                    cmd.Y_out = 0.0;
-                    cmd.Z_out = posZ_error*Kp_z;
-                    cmd.PSI_out = Kp_psi*psi_error*1.0;
-                    gate_num = 0;
-                    count_mission_start = 0;
-                }
-            }
- */
-            if (gate_num > 2)
-            {
-                cmd.X_out = 0.0;
-                cmd.Y_out = 0.0;
-                cmd.Z_out = 0.0;
-                cmd.PSI_out = 0.0;
-                gate_num = 0 ;
-            }
-
-            if ( (flag_gate_clear == 1) && (flag_gate_center_matching == 0) && (flag_gate_init == 0) )
-            {
-                count_fwd = count_fwd + 1;
-
-                if(count_fwd < 1.5*SECOND)
-                {
-                    cmd.X_out = Kp_x*pos_error_x_m - opt_flow_msg.linear.x*Kd_x ;
-                    cmd.Y_out = WP_y[gate_num];
-                    cmd.Z_out = posZ_error*Kp_z;
-                    cmd.PSI_out = Kp_psi*psi_error*1.0;
-                    flag_gate_init = 1;
-                }
-
-                else
-                {
-                    cmd.X_out = 0.0 ;
-                    cmd.Y_out = WP_y[gate_num];
-                    cmd.Z_out = posZ_error*Kp_z;
-                    cmd.PSI_out = Kp_psi*psi_error*1.0;
-                    if( ( (img.pos_error_pixel[5] > 0.5) && (img.pos_error_pixel[5] < 0.95) ) && (img.pos_error_pixel[4] == 1)) cmd.X_out = -AVOIDANCE_VEL;
-                    else if ( ( (img.pos_error_pixel[5] > 0.5) && (img.pos_error_pixel[5] < 0.95) ) && (img.pos_error_pixel[4] == 2)) cmd.X_out = AVOIDANCE_VEL;
-                    else cmd.X_out = cmd.X_out;
-                }
-            }
-
-#ifdef LOG_SPECIFY
-            fprintf(pFile, "clear: %d,  matching: %d,   gate_num: %d\n", flag_gate_clear, flag_gate_center_matching, gate_num);
-#endif
         }
+
 
         updatedata();
         //===== Serial TX part=====//
@@ -486,9 +302,7 @@ int main(int argc, char** argv)
 		loop_rate.sleep();
 
         imu_pub.publish(imu_msg);
-        pose_down_pub.publish(pose_down_msg);
-        opt_flow_pub.publish(opt_flow_msg);
-        obs_through_pub.publish(obs_through_msg);
+
         count_ros = count_ros + 1;
 
         // loop sampling, ros
