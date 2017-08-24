@@ -42,7 +42,7 @@
 #define IDs1          0x01
 #define IDs2          0x01
 
-#define PORT1 		"/dev/ttyUSB0"
+#define PORT1 		"/dev/ttyUSB1"
 #define BAUDRATE 	921600
 
 // Main Function Argument

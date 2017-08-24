@@ -5,6 +5,7 @@
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
+#include <sensor_msgs/Range.h>
 #include <std_msgs/Float32MultiArray.h>
 #include <std_msgs/UInt8.h>
 #include <geometry_msgs/Twist.h>

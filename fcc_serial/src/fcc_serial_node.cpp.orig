@@ -12,23 +12,42 @@
 #define Kp_psi                       (         1)
 
 #define eps                          ( 0.0000001)
+#define AVOIDANCE_VEL       (float ) (       0.2)
+#define VEL_FWD             (float ) (       0.4)
 #define D2R                 (float ) (3.141592 / 180.0)
 #define SECOND                       (        20)
+#define _GATE_THRES         (float ) (      -1.0)
+#define _MIN_ALT            (float ) (      -0.4)
 
 
 bool    flag_roll          = 1  ;
 bool    flag_FM            = 0  ;
-int 	FdPort1                 ;
 // Serial Communication initialization
+int     flag_gate = 0           ;
 int     time_flag   = 1         ;
+int     flag_sonar  = 0         ;
+int     flag_gate_clear = 0     ;
+int     flag_gate_center_matching = 0   ;
+int     flag_gate_init = 0      ;
+
+int 	FdPort1                 ;
+int     count_ros   = 0         ;
+int     count_fwd   = 0         ;
+int     count_mission_start = 0 ;
 int     gate_num = 0            ;
+int     turn_check = 0          ;
+
+float   t_capt = 0.0            ;
+float   t_rel = 0.0             ;
+float   t_cur = 0.0             ;
 float   Y_cmd             = 2.0 ;
 float   pos_error_x_m     = 0.0 ;
-float   pos_error_y_m     = 0.0 ;
-float   cmd_pos_x         = 0.0 ;
-float   cmd_pos_y         = 0.0 ;
-float   cmd_pos_z         = 0.0 ;
 float   cmd_pos_psi       = 0.0 ;
+float   cmd_pos_z         = 0.0 ;
+float   K_sonar           = 1.0 ;
+float   K_lidar           = 0.0 ;
+float   sonar_LPF = 0.0         ;
+float   LPF_gain = 0.9          ;
 float 	h                       ;
 float   r_data                  ;
 float   a_param, b_param        ;
@@ -39,6 +58,7 @@ float WP_x[3] = {0,0,0};
 float WP_y[3] = {0,0,0};
 float WP_z[3] = {0,0,0};
 float WP_psi[3] = {0,0,0};
+float WP_gate_thres[3] = {0,0,0};
 
 int OpenSerial(char *device_name);
 int CloseSerial(int fd);
@@ -96,9 +116,9 @@ void OpticalFlow(const geometry_msgs::Twist& opt_flow_msg)
 
 void ZedOdom(const nav_msgs::Odometry& zed_odom_msg)
 {
-    Odom_zed.x = -zed_odom_msg.pose.pose.position.y; //lateral
-    Odom_zed.y = -zed_odom_msg.pose.pose.position.x; //longitudinal
-    Odom_zed.z = zed_odom_msg.pose.pose.position.z;  //heave
+    Odom_zed.x = -zed_odom_msg.pose.pose.position.y;
+    Odom_zed.y = zed_odom_msg.pose.pose.position.x;
+    Odom_zed.z = zed_odom_msg.pose.pose.position.z;
 }
 
 int main(int argc, char** argv)
@@ -153,75 +173,154 @@ int main(int argc, char** argv)
 
 	while( ok() )
         {
-             cout << "x:   "   <<  Odom_zed.x << "   y:     " << Odom_zed.y << "\n";
+        /// messages
+        sensor_msgs::Imu imu_msg;
 
 
-            if (StrRXttyO.Mode_FlightMode == 1)
+        /// Imu data read fcc -> Tk1
+        imu_msg.header.stamp = ros::Time::now();
+        imu_msg.header.frame_id = "imu";
+
+        for (int i = 0; i < 9; i++)
+         {
+           imu_msg.linear_acceleration_covariance[i] = 0.0;
+           imu_msg.angular_velocity_covariance[i] = 0.0;
+           imu_msg.orientation_covariance[i] = 0.0;
+         }
+
+        imu_msg.orientation.x = StrRXttyO.Cur_Att_deg[1];
+        imu_msg.orientation.y = StrRXttyO.Cur_Att_deg[0];
+        imu_msg.orientation.z = StrRXttyO.Cur_Att_deg[2];
+
+        imu_msg.angular_velocity.x = StrRXttyO.Cur_AngularRate_dps[1];
+        imu_msg.angular_velocity.y = StrRXttyO.Cur_AngularRate_dps[0];
+        imu_msg.angular_velocity.z = StrRXttyO.Cur_AngularRate_dps[2];
+
+        imu_msg.linear_acceleration.x = StrRXttyO.Cur_LinAccAED_mpss[1];
+        imu_msg.linear_acceleration.y = StrRXttyO.Cur_LinAccAED_mpss[0];
+        imu_msg.linear_acceleration.z = StrRXttyO.Cur_LinAccAED_mpss[2];
+
+        cout << Odom_zed.x << "   " << Odom_zed.y << "\n";
+
+
+        if (StrRXttyO.Mode_FlightMode == 1)
+        {
+            cout << "\n1. Attitude control Mode" << "\n";
+            gate_num = 0;            
+            flag_roll = 1;
+            flag_gate = 0;
+            time_flag = 0;
+            count_fwd = 0;
+            count_mission_start = 0;
+
+            WP_psi[0] = ( 0.0 + 0.0 ) ;
+            WP_psi[1] = ( WP_psi[0] + 0.0 ) ;
+            WP_psi[2] = ( WP_psi[0] + 0.0 ) ;
+
+            WP_x[0] = 0.0       ;
+            WP_x[1] = 0.0       ;
+            WP_x[2] = 0.0       ;
+
+            WP_y[0] = 0.0       ;
+            WP_y[1] = 0.0       ;
+            WP_y[2] = 0.0       ;
+
+            WP_z[0] = -1.65          ;
+            WP_z[1] = -2.15          ;
+            WP_z[2] = -1.65          ;
+        }
+
+        if (StrRXttyO.Mode_FlightMode == 2)
+        {
+            flag_FM = 1;            
+            cout << "\n2. Optical Flow Mode" << "\n";
+        }
+
+        if (StrRXttyO.Mode_FlightMode >= 3 && flag_FM == 1)
+        {
+            cout << "\n3. Mission Mode" << "\n";
+            count_mission_start = count_mission_start + 1;
+            flag_gate_center_matching = 1;
+            flag_gate_clear = 0;
+            flag_gate_init = 1;
+
+            cmd_pos_psi = WP_psi[gate_num];
+            cmd_pos_z   = WP_z[gate_num]  ;
+            cmd_pos_x   = WP_x[gate_num]  ;
+            cmd_pos_y   = WP_y[gate_num]  ;
+
+            float psi_error  = YawAngleMod(cmd_pos_psi - StrRXttyO.Cur_Att_deg[2]);
+            float posZ_error = cmd_pos_z - StrRXttyO.LidarPosDown_m;
+
+            if( fabs( psi_error  ) < 20.0 && fabs( pos_error_x_m  ) < 0.4)
             {
-                cout << "\n1. Attitude control Mode" << "\n";
-                gate_num = 0;
-
-
-                WP_psi[0] = ( 0.0 + 0.0 ) ;
-                WP_psi[1] = ( WP_psi[0] + 0.0 ) ;
-                WP_psi[2] = ( WP_psi[0] + 0.0 ) ;
-
-                WP_x[0] = 0.0       ;
-                WP_x[1] = 0.0       ;
-                WP_x[2] = 0.0       ;
-
-                WP_y[0] = 0.0       ;
-                WP_y[1] = 0.0       ;
-                WP_y[2] = 0.0       ;
-
-                WP_z[0] = -1.65          ;
-                WP_z[1] = -2.15          ;
-                WP_z[2] = -1.65          ;
+                flag_gate_clear = 1;
+                flag_gate_center_matching = 0;
+                turn_check = 0;
             }
 
-            if (StrRXttyO.Mode_FlightMode == 2)
+            else if (flag_gate_center_matching == 1)
             {
-                flag_FM = 1;
-                cout << "\n2. Optical Flow Mode" << "\n";
-            }
-
-            if (StrRXttyO.Mode_FlightMode >= 3 && flag_FM == 1)
-            {
-                cout << "\n3. Mission Mode" << "\n";
-
-                cmd_pos_psi = WP_psi[gate_num];
-                cmd_pos_z   = WP_z[gate_num]  ;
-                cmd_pos_x   = WP_x[gate_num]  ;
-                cmd_pos_y   = WP_y[gate_num]  ;
-
-                float psi_error     = YawAngleMod(cmd_pos_psi - StrRXttyO.Cur_Att_deg[2]);
-                float posZ_error    = cmd_pos_z - StrRXttyO.LidarPosDown_m;
-                float pos_error_x_m = cmd_pos_z - Odom_zed.x;
-                float pos_error_y_m = cmd_pos_z - Odom_zed.y;
-
                 cmd.X_out = Kp_x*pos_error_x_m;
-                cmd.Y_out = Kp_y*pos_error_y_m;
+                cmd.Y_out = 0.0;
                 cmd.Z_out = posZ_error*Kp_z;
                 cmd.PSI_out = Kp_psi*psi_error*1.0;
-
-             }
-
-
-            updatedata();
-            //===== Serial TX part=====//
-            serialsend(FdPort1);
-
-            if(StrMainFuncArgs.Flag_Args[0] == 1) // Case of Activating Onboard Logging
-                    {
-                            //printf("Debug OnboadLog\n");
-                            DS_OnboardLog();
+                turn_check = 1;
             }
 
-            // loop rate [Hz]
-            loop_rate.sleep();
-            // loop sampling, ros
-            spinOnce();
+///---------------------------------------Seems that modifications are needed--------------------------------------
+            if ( ( ((StrRXttyO.SonarPosDown_m)>_GATE_THRES) && ((StrRXttyO.SonarPosDown_m)<_MIN_ALT) ) && (flag_sonar == 0) && (count_mission_start > 3*SECOND) )
+            {
+                    flag_gate = 1;
+                    flag_sonar = 1;
+            }
+
+            if( flag_gate == 1 )
+            {
+                gate_num = gate_num+1;
+                flag_roll = 1;
+                flag_gate = 0;
+                time_flag = 0;
+                count_fwd = 0;
+            }
+
+            if(time_flag == 0)
+            {
+                t_capt = t_cur;
+                time_flag = 1;
+            }
+            t_rel = t_cur - t_capt;
+
+            if(t_rel > 2.0)
+            {
+                flag_sonar = 0;
+                t_capt = 0.0;
+                t_rel = 0.0;
+                time_flag = 0;
+            }
         }
+
+
+        updatedata();
+        //===== Serial TX part=====//
+        serialsend(FdPort1);
+
+        if(StrMainFuncArgs.Flag_Args[0] == 1) // Case of Activating Onboard Logging
+		{
+			//printf("Debug OnboadLog\n");
+			DS_OnboardLog();
+        }
+
+		// loop rate [Hz]
+		loop_rate.sleep();
+
+        imu_pub.publish(imu_msg);
+
+        count_ros = count_ros + 1;
+
+        // loop sampling, ros
+        spinOnce();
+	}
 	// for debugging
 	printf("Terminate: FCC_Serial_node\n");
 	return 0;
