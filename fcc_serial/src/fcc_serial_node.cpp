@@ -138,7 +138,7 @@ int main(int argc, char** argv)
 	printf("Initiate: FCC_Serial_node\n");
 
 	// subscribing the image processing results (x_pos, y_pos)   
-        Subscriber zed_odom_sub_ = nh_.subscribe("/odom", 1, &ZedOdom);
+        Subscriber zed_odom_sub_ = nh_.subscribe("/zed/odom", 1, &ZedOdom);
         Publisher  imu_pub = nh_.advertise<sensor_msgs::Imu>("imu/data_raw", 1000);
 
 	receive_data.data.resize(10);
