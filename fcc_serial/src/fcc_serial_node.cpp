@@ -516,9 +516,9 @@ void updatedata(void)
     memcpy((void *)(tx.Data),(void *)(data),sizeofdata);
 }
 
-void *serialreceive(void *fd)
+void *serialreceive(void *fdt)
 {
-
+	int fd = *((int*) &fdt);
 	int datasize;
 	unsigned char RXRawData[sizeof(StrRXttyO)];
 

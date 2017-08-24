@@ -1,3 +1,4 @@
+SET(CUDA_USE_STATIC_CUDA_RUNTIME OFF)
 cmake_minimum_required(VERSION 2.8.3)
 project(fcc_serial)
 
