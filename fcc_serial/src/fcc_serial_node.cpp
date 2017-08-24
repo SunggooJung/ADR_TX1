@@ -3,9 +3,6 @@
 ///
 #include "DefineList.h"
 
-#define DEMO
-#define LOG_SPECIFY
-
 #define Kp_x                         (       0.3)
 #define Kd_x                         (       0.0)
 #define Kp_y                         (       0.4)
@@ -248,7 +245,7 @@ int main(int argc, char** argv)
 
             else if (flag_gate_center_matching == 1)
             {
-                cmd.X_out = Kp_x*pos_error_x_m - opt_flow_msg.linear.x*Kd_x ;
+                cmd.X_out = Kp_x*pos_error_x_m;
                 cmd.Y_out = 0.0;
                 cmd.Z_out = posZ_error*Kp_z;
                 cmd.PSI_out = Kp_psi*psi_error*1.0;
