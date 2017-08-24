@@ -200,9 +200,8 @@ int main(int argc, char** argv)
         imu_msg.linear_acceleration.y = StrRXttyO.Cur_LinAccAED_mpss[0];
         imu_msg.linear_acceleration.z = StrRXttyO.Cur_LinAccAED_mpss[2];
 
-
         cout << opt_flow.x << "   " << opt_flow.y << "\n";
-
+        cout << StrRXttyO.FlowXY_mps[0] << "   " << StrRXttyO.FlowXY_mps[0]<< "\n";
 
         if (StrRXttyO.Mode_FlightMode == 1)
         {
