@@ -66,14 +66,14 @@ struct senddata
 struct struct_t_MessageBody // Always Make 40 Bytes
 {
 	unsigned char   FlagA;
-	unsigned char   FlagB;
+        unsigned char   Flag_Sensing;
 	unsigned char   FlagC;
 	unsigned char   FlagD;
 	float 		CmdVelAil;
 	float 		CmdVelEle;
 	float 		CmdVelDown;
 	float           CmdR_dps;
-	float 		unresolv[2];		
+        float 		Cur_FlowAilEle_mps[2];
 
 	uint16_t PWM_Ch_09_14_PulseWidth_usec[6];
 };
@@ -90,6 +90,15 @@ struct Odometry_zed// Always Make 40 Bytes
 };
 #pragma pack()
 
+
+
+#pragma pack(1)
+struct OpticalFlow_zed// Always Make 40 Bytes
+{
+    float 		x;
+    float 		y;
+};
+#pragma pack()
 
 
 #pragma pack(1)

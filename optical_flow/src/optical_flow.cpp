@@ -166,10 +166,7 @@ int main(int argc, char** argv)
 
             if(save_flag != 0 ){
                 fprintf(pFile,"%5.2f:%5.2f:%4ld\n",100*v_x, 100*v_y, duration);
-            }
-            else{
-                printf("Vx = %+5.2f, Vy = %+5.2f, Px = %+5.2f, Py = %+5.2f, dx = %+5.2f, dy = %+5.2f, dt[msec] = %4ld\n", 100*v_x, 100*v_y, 100*pos_x, 100*pos_y, dx / min_size, dy / min_size, duration);
-            }
+            }            
 
             /// Optical flow data read
             opt_flow_msg.linear.x = v_x;

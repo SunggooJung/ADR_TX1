@@ -73,6 +73,7 @@ struct struct_t_MessageBody  tx_data;
 struct struct_t_RXttyO       StrRXttyO;
 struct struct_t_MainFuncArgs StrMainFuncArgs;
 struct Odometry_zed          Odom_zed;
+struct OpticalFlow_zed       opt_flow;
 struct Image_error     	     img;
 struct velocity_command      cmd;
 
@@ -107,6 +108,12 @@ float sat(float data, float max)
     return res;
 }
 
+void OpticalFlow(const geometry_msgs::Twist& opt_flow_msg)
+{
+    opt_flow.x = opt_flow_msg.linear.x;
+    opt_flow.y = opt_flow_msg.linear.y;
+}
+
 void ZedOdom(const nav_msgs::Odometry& zed_odom_msg)
 {
     Odom_zed.x = -zed_odom_msg.pose.pose.position.y;
@@ -139,6 +146,7 @@ int main(int argc, char** argv)
 
 	// subscribing the image processing results (x_pos, y_pos)   
         Subscriber zed_odom_sub_ = nh_.subscribe("/zed/odom", 1, &ZedOdom);
+        Subscriber opt_flow_sub_ = nh_.subscribe("/camera/opt_flow", 1, &OpticalFlow);
         Publisher  imu_pub = nh_.advertise<sensor_msgs::Imu>("imu/data_raw", 1000);
 
 	receive_data.data.resize(10);
@@ -190,7 +198,10 @@ int main(int argc, char** argv)
 
         imu_msg.linear_acceleration.x = StrRXttyO.Cur_LinAccAED_mpss[1];
         imu_msg.linear_acceleration.y = StrRXttyO.Cur_LinAccAED_mpss[0];
-        imu_msg.linear_acceleration.z = StrRXttyO.Cur_LinAccAED_mpss[2];        
+        imu_msg.linear_acceleration.z = StrRXttyO.Cur_LinAccAED_mpss[2];
+
+
+        cout << opt_flow.x << "   " << opt_flow.y << "\n";
 
 
         if (StrRXttyO.Mode_FlightMode == 1)
@@ -313,15 +324,19 @@ int main(int argc, char** argv)
 void updatedata(void)
 {
     /// tx_data update
-    tx_data.FlagA   =0;
-    tx_data.FlagB   =0;
-    tx_data.FlagC   =0;
-    tx_data.FlagD   =0;
+    tx_data.FlagA        =0; // Flag for auto takeoff/landing/motor-cut, etc...
+    tx_data.Flag_Sensing =1; // [1] = flow from high-level computer (TX1, 2, etc...)
+    tx_data.FlagC        =0; // N/A
+    tx_data.FlagD        =0; // N/A
 
     tx_data.CmdVelAil = sat(cmd.X_out, 2.0);
     tx_data.CmdVelEle = sat(cmd.Y_out, 1.0);
     tx_data.CmdVelDown = sat(cmd.Z_out, 4.0);
     tx_data.CmdR_dps = sat(cmd.PSI_out, 15);
+
+    tx_data.Cur_FlowAilEle_mps[0] = opt_flow.x;
+    tx_data.Cur_FlowAilEle_mps[1] = opt_flow.y;
+
 
     unsigned char *data = (unsigned char *)&tx_data;
     memcpy((void *)(tx.Data),(void *)(data),sizeofdata);
