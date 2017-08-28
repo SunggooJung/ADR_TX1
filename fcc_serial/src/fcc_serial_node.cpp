@@ -33,6 +33,7 @@ float 	h                       ;
 float   r_data                  ;
 float   a_param, b_param        ;
 char    filename[50]            ;
+float height_m = 0.0;
 
 // Mission control
 float WP_x[3] = {0,0,0};
@@ -101,6 +102,11 @@ void ZedOdom(const nav_msgs::Odometry& zed_odom_msg)
     Odom_zed.z = zed_odom_msg.pose.pose.position.z;  //heave
 }
 
+void Lidar(const sensor_msgs::Range &Lidar_Height_msg)
+{
+    height_m = Lidar_Height_msg.range;
+}
+
 int main(int argc, char** argv)
 {
     static FILE* pFile;
@@ -127,6 +133,7 @@ int main(int argc, char** argv)
 	// subscribing the image processing results (x_pos, y_pos)   
         Subscriber zed_odom_sub_ = nh_.subscribe("/zed/odom", 1, &ZedOdom);
         Subscriber opt_flow_sub_ = nh_.subscribe("/camera/opt_flow", 1, &OpticalFlow);
+        Subscriber Lidar_sub_ = nh_.subscribe("/terarangerone", 1, &Lidar);
         Publisher  imu_pub = nh_.advertise<sensor_msgs::Imu>("imu/data_raw", 1000);
 
 	receive_data.data.resize(10);
@@ -153,7 +160,7 @@ int main(int argc, char** argv)
 
 	while( ok() )
         {
-             cout << "x:   "   <<  Odom_zed.x << "   y:     " << Odom_zed.y << "\n";
+             cout << "x:   "   <<  Odom_zed.x << "   y:     " << Odom_zed.y <<  "  h:   " << height_m << "\n";
 
 
             if (StrRXttyO.Mode_FlightMode == 1)
@@ -195,13 +202,13 @@ int main(int argc, char** argv)
                 cmd_pos_y   = WP_y[gate_num]  ;
 
                 float psi_error     = YawAngleMod(cmd_pos_psi - StrRXttyO.Cur_Att_deg[2]);
-                float posZ_error    = cmd_pos_z - StrRXttyO.LidarPosDown_m;
+                float posZ_error    = cmd_pos_z - height_m;
                 float pos_error_x_m = cmd_pos_z - Odom_zed.x;
                 float pos_error_y_m = cmd_pos_z - Odom_zed.y;
 
                 cmd.X_out = Kp_x*pos_error_x_m;
                 cmd.Y_out = Kp_y*pos_error_y_m;
-                cmd.Z_out = posZ_error*Kp_z;
+                cmd.Z_out = Kp_z*posZ_error;
                 cmd.PSI_out = Kp_psi*psi_error*1.0;
 
              }

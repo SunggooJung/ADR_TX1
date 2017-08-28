@@ -11,6 +11,7 @@
 #include "sensor_msgs/Imu.h"
 #include "geometry_msgs/Twist.h"
 #include <nav_msgs/Odometry.h>
+#include "sensor_msgs/Range.h"
 
 // for using serial communication
 #include <unistd.h>
