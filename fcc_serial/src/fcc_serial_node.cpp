@@ -107,6 +107,18 @@ void Lidar(const sensor_msgs::Range &Lidar_Height_msg)
     height_m = Lidar_Height_msg.range;
 }
 
+void callback_serial_comm(const std_msgs::Float32MultiArray &msg)
+{
+    img.pos_error_pixel[0] 		 = msg.data[0]; //lateral axis error
+    img.pos_error_pixel[1] 		 = msg.data[1]; //longitudinal axis error
+    img.pos_error_pixel[2] 		 = msg.data[2]; //distance to gate
+
+    //r_data 		 = 0.0;
+
+    float div_x = -12.34*pow(img.pos_error_pixel[2],2) + 121.6*img.pos_error_pixel[2] -336.1;
+    pos_error_x_m = -img.pos_error_pixel[0] / div_x;
+}
+
 int main(int argc, char** argv)
 {
     static FILE* pFile;
@@ -131,6 +143,7 @@ int main(int argc, char** argv)
 	printf("Initiate: FCC_Serial_node\n");
 
 	// subscribing the image processing results (x_pos, y_pos)   
+        Subscriber msg_data_input  = nh_.subscribe("/gate/pos_info", 4, callback_serial_comm);
         Subscriber zed_odom_sub_ = nh_.subscribe("/zed/odom", 1, &ZedOdom);
         Subscriber opt_flow_sub_ = nh_.subscribe("/camera/opt_flow", 1, &OpticalFlow);
         Subscriber Lidar_sub_ = nh_.subscribe("/terarangerone", 1, &Lidar);        
@@ -206,17 +219,16 @@ int main(int argc, char** argv)
                 cmd_pos_x   = WP_x[gate_num]  ;
                 cmd_pos_y   = WP_y[gate_num]  ;
 
-                float psi_error     = YawAngleMod(cmd_pos_psi - StrRXttyO.Cur_Att_deg[2]);
+                float psi_error     = 0.0;//YawAngleMod(cmd_pos_psi - StrRXttyO.Cur_Att_deg[2]);
                 float posZ_error    = cmd_pos_z - height_m;
-                float pos_error_x_m = cmd_pos_x - Odom_zed.x;
-                float pos_error_y_m = cmd_pos_y - Odom_zed.y;
+                //float pos_error_x_m = img.pos_error_pixel[0];
 
                 cmd.X_out = Kp_x*pos_error_x_m - StrRXttyO.FlowXY_mps[0]*Kd_x ;
-                cmd.Y_out = Kp_y*pos_error_y_m - StrRXttyO.FlowXY_mps[1]*Kd_y ;
+                cmd.Y_out = 0.0 ;
                 cmd.Z_out = -1.0*Kp_z*posZ_error;
                 cmd.PSI_out = Kp_psi*psi_error*1.0;
 
-		cout << "x:   "   <<  Odom_zed.x << "   y:     " << Odom_zed.y <<  "  h:   " << height_m << "\n";
+                cout << "x:   "   <<  pos_error_x_m << "   y:     " << Odom_zed.y <<  "  h:   " << height_m << "\n";
 
              }
 

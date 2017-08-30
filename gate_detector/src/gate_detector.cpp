@@ -1,7 +1,8 @@
 //Description: For IROS Gate Detection
 //Update
 
-#define ground_test
+#define FOCAL_LENGTH    (float)    ( 350.497 )  // /usr/local/zed/settings/sn2914.conf
+#define OBJECT_WIDTH    (float)    (    1.35 )
 
 #define VGA_WIDTH   640
 #define VGA_HEIGHT  480
@@ -28,7 +29,8 @@ class ImageConverter
 public:
     ros::NodeHandle nh_;
     image_transport::ImageTransport it_;
-    image_transport::Subscriber image_sub_;
+    image_transport::Subscriber image_sub_;    
+    image_transport::Publisher fit_pub_;
     ros::Publisher gate_info_pub;
     ros::Subscriber fcc_sub_;
 
@@ -37,7 +39,8 @@ public:
     {
         // Subscrive to input video feed and publish output video feed
         image_sub_ = it_.subscribe("/firefly_mv/image_raw", 1, &ImageConverter::imageRgb, this);
-        gate_info_pub = nh_.advertise<std_msgs::Float32MultiArray>("/gate/pos_info",1);
+        gate_info_pub = nh_.advertise<std_msgs::Float32MultiArray>("/gate/pos_info",1);                
+        fit_pub_ = it_.advertise("/rgb/detect_result", 1);
         fcc_sub_ = nh_.subscribe("/fcc_info", 20, &FccCallback);
     }
 
@@ -284,6 +287,7 @@ int main(int argc, char** argv)
     // Initialize the network.
     Detector detector(model_path, weights_path, "", "104,117,123");
     float pose_error = 0.0;
+    float distance_to_obs = 0.0;
     while (ros::ok())
     {
 
@@ -312,6 +316,7 @@ int main(int argc, char** argv)
             	BndInfo.center[1] = (pt1.y+pt2.y)/2.0;
 
                 pose_error = sqrt ( pow(VGA_WIDTH/2+WIDTH_OFFSET - BndInfo.center[0],2) + pow(VGA_HEIGHT/2+HEIGHT_OFFSET - BndInfo.center[1],2) );
+                distance_to_obs = (FOCAL_LENGTH * OBJECT_WIDTH) / (fabs(boundRect[BndInfo.maxboxind].tl().x - boundRect[BndInfo.maxboxind].br().x));
 
                 // drawing section
                 line(rgb_frame, cv::Point(VGA_WIDTH/2+WIDTH_OFFSET,VGA_HEIGHT/2+HEIGHT_OFFSET), cv::Point(BndInfo.center[0],BndInfo.center[1]), cv::Scalar(0, 0, 0), 1, 8, 0);
@@ -333,18 +338,15 @@ int main(int argc, char** argv)
 
                 msg_gate_pos.data.clear();
                 msg_gate_pos.data.resize(3);
-                msg_gate_pos.data[0] = (BndInfo.center[0] - (width/2+WIDTH_OFFSET));
-                msg_gate_pos.data[1] = (BndInfo.center[1] - (height/2+HEIGHT_OFFSET));
-                msg_gate_pos.data[2] = pose_error;
+                msg_gate_pos.data[0] = (BndInfo.center[0] - (VGA_WIDTH/2+WIDTH_OFFSET));
+                msg_gate_pos.data[1] = (BndInfo.center[1] - (VGA_HEIGHT/2+HEIGHT_OFFSET));
+                msg_gate_pos.data[2] = distsnace_to_obs;
 
-                ic.gate_info_pub.publish(msg_gate_pos);
+                sensor_msgs::ImagePtr fit_msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", rgb_frame).toImageMsg();
 
+                ic.gate_info_pub.publish(msg_gate_pos);                
+                ic.fit_pub_.publish(fit_msg);
             }
-#ifdef ground_test
-		cv::imshow("Video",rgb_frame);
-                if (cv::waitKey(1) == 27)
-                    break;
-#endif
         }
 	//DONT TOUCH BELOW HERE 
         ros::spinOnce();
