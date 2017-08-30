@@ -3,7 +3,7 @@
 ///
 #include "DefineList.h"
 
-#define Kp_x                         (       0.3)
+#define Kp_x                         (       0.4)
 #define Kd_x                         (       0.0)
 #define Kp_y                         (       0.4)
 #define Kd_y                         (       0.1)
@@ -133,8 +133,8 @@ int main(int argc, char** argv)
 	// subscribing the image processing results (x_pos, y_pos)   
         Subscriber zed_odom_sub_ = nh_.subscribe("/zed/odom", 1, &ZedOdom);
         Subscriber opt_flow_sub_ = nh_.subscribe("/camera/opt_flow", 1, &OpticalFlow);
-        Subscriber Lidar_sub_ = nh_.subscribe("/terarangerone", 1, &Lidar);
-        Publisher  imu_pub = nh_.advertise<sensor_msgs::Imu>("imu/data_raw", 1000);
+        Subscriber Lidar_sub_ = nh_.subscribe("/terarangerone", 1, &Lidar);        
+        Publisher  fcc_info_pub = nh_.advertise<std_msgs::Int8MultiArray>("/fcc_info", 20);
 
 	receive_data.data.resize(10);
 
@@ -160,8 +160,13 @@ int main(int argc, char** argv)
 
 	while( ok() )
         {
-             cout << "x:   "   <<  Odom_zed.x << "   y:     " << Odom_zed.y <<  "  h:   " << height_m << "\n";
+            std_msgs::Int8MultiArray fcc_info_msg;
 
+            fcc_info_msg.data.clear();
+            fcc_info_msg.data.resize(4);
+            fcc_info_msg.data[0] = StrRXttyO.Mode_FlightMode;
+            fcc_info_msg.data[1] = gate_num;
+            fcc_info_msg.data[2] = height_m;
 
             if (StrRXttyO.Mode_FlightMode == 1)
             {
@@ -181,9 +186,9 @@ int main(int argc, char** argv)
                 WP_y[1] = 0.0       ;
                 WP_y[2] = 0.0       ;
 
-                WP_z[0] = -1.65          ;
-                WP_z[1] = -2.15          ;
-                WP_z[2] = -1.65          ;
+                WP_z[0] = 1.65          ;
+                WP_z[1] = 2.15          ;
+                WP_z[2] = 1.65          ;
             }
 
             if (StrRXttyO.Mode_FlightMode == 2)
@@ -203,13 +208,15 @@ int main(int argc, char** argv)
 
                 float psi_error     = YawAngleMod(cmd_pos_psi - StrRXttyO.Cur_Att_deg[2]);
                 float posZ_error    = cmd_pos_z - height_m;
-                float pos_error_x_m = cmd_pos_z - Odom_zed.x;
-                float pos_error_y_m = cmd_pos_z - Odom_zed.y;
+                float pos_error_x_m = cmd_pos_x - Odom_zed.x;
+                float pos_error_y_m = cmd_pos_y - Odom_zed.y;
 
-                cmd.X_out = Kp_x*pos_error_x_m;
-                cmd.Y_out = Kp_y*pos_error_y_m;
-                cmd.Z_out = Kp_z*posZ_error;
+                cmd.X_out = Kp_x*pos_error_x_m - StrRXttyO.FlowXY_mps[0]*Kd_x ;
+                cmd.Y_out = Kp_y*pos_error_y_m - StrRXttyO.FlowXY_mps[1]*Kd_y ;
+                cmd.Z_out = -1.0*Kp_z*posZ_error;
                 cmd.PSI_out = Kp_psi*psi_error*1.0;
+
+		cout << "x:   "   <<  Odom_zed.x << "   y:     " << Odom_zed.y <<  "  h:   " << height_m << "\n";
 
              }
 
@@ -223,6 +230,9 @@ int main(int argc, char** argv)
                             //printf("Debug OnboadLog\n");
                             DS_OnboardLog();
             }
+
+            fcc_info_pub.publish(fcc_info_msg);
+
 
             // loop rate [Hz]
             loop_rate.sleep();

@@ -1,0 +1,110 @@
+item {
+  name: "none_of_the_above"
+  label: 0
+  display_name: "background"
+}
+item {
+  name: "frame"
+  label: 1
+  display_name: "frame"
+}
+item {
+  name: "nothing"
+  label: 2
+  display_name: "nothing"
+}
+item {
+  name: "nothing"
+  label: 3
+  display_name: "nothing"
+}
+item {
+  name: "nothing"
+  label: 4
+  display_name: "nothing"
+}
+item {
+  name: "nothing"
+  label: 5
+  display_name: "nothing"
+}
+item {
+  name: "nothing"
+  label: 6
+  display_name: "nothing"
+}
+item {
+  name: "nothing"
+  label: 7
+  display_name: "nothing"
+}
+item {
+  name: "nothing"
+  label: 8
+  display_name: "nothing"
+}
+item {
+  name: "nothing"
+  label: 9
+  display_name: "nothing"
+}
+item {
+  name: "nothing"
+  label: 10
+  display_name: "nothing"
+}
+item {
+  name: "nothing"
+  label: 11
+  display_name: "nothing"
+}
+item {
+  name: "nothing"
+  label: 12
+  display_name: "nothing"
+}
+item {
+  name: "nothing"
+  label: 13
+  display_name: "nothing"
+}
+item {
+  name: "nothing"
+  label: 14
+  display_name: "nothing"
+}
+item {
+  name: "nothing"
+  label: 15
+  display_name: "nothing"
+}
+item {
+  name: "nothing"
+  label: 16
+  display_name: "nothing"
+}
+item {
+  name: "nothing"
+  label: 17
+  display_name: "nothing"
+}
+item {
+  name: "nothing"
+  label: 18
+  display_name: "nothing"
+}
+item {
+  name: "nothing"
+  label: 19
+  display_name: "nothing"
+}
+item {
+  name: "nothing"
+  label: 20
+  display_name: "nothing"
+}
+item {
+  name: "nothing"
+  label: 21
+  display_name: "nothing"
+}
