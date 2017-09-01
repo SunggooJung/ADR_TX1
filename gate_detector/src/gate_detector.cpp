@@ -1,7 +1,7 @@
 //Description: For IROS Gate Detection
 //Update
 
-#define FOCAL_LENGTH    (float)    ( 350.497 )  // /usr/local/zed/settings/sn2914.conf
+#define FOCAL_LENGTH    (float)    (  274.11 )  // /usr/local/zed/settings/sn2914.conf
 #define OBJECT_WIDTH    (float)    (    1.35 )
 
 #define VGA_WIDTH   640
@@ -316,7 +316,7 @@ int main(int argc, char** argv)
             	BndInfo.center[1] = (pt1.y+pt2.y)/2.0;
 
                 pose_error = sqrt ( pow(VGA_WIDTH/2+WIDTH_OFFSET - BndInfo.center[0],2) + pow(VGA_HEIGHT/2+HEIGHT_OFFSET - BndInfo.center[1],2) );
-                distance_to_obs = (FOCAL_LENGTH * OBJECT_WIDTH) / (fabs(boundRect[BndInfo.maxboxind].tl().x - boundRect[BndInfo.maxboxind].br().x));
+                distance_to_obs = (FOCAL_LENGTH * OBJECT_WIDTH) / (fabs(pt1.x - pt2.x));
 
                 // drawing section
                 line(rgb_frame, cv::Point(VGA_WIDTH/2+WIDTH_OFFSET,VGA_HEIGHT/2+HEIGHT_OFFSET), cv::Point(BndInfo.center[0],BndInfo.center[1]), cv::Scalar(0, 0, 0), 1, 8, 0);
@@ -337,10 +337,11 @@ int main(int argc, char** argv)
                 cv::putText(rgb_frame, text_curH, cvPoint(20, 60), CV_FONT_HERSHEY_PLAIN, 1.1, cvScalar(255, 0, 0), 2);
 
                 msg_gate_pos.data.clear();
-                msg_gate_pos.data.resize(3);
+                msg_gate_pos.data.resize(4);
                 msg_gate_pos.data[0] = (BndInfo.center[0] - (VGA_WIDTH/2+WIDTH_OFFSET));
                 msg_gate_pos.data[1] = (BndInfo.center[1] - (VGA_HEIGHT/2+HEIGHT_OFFSET));
-                msg_gate_pos.data[2] = distsnace_to_obs;
+                msg_gate_pos.data[2] = distance_to_obs;
+                msg_gate_pos.data[3] = pose_error;
 
                 sensor_msgs::ImagePtr fit_msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", rgb_frame).toImageMsg();
 

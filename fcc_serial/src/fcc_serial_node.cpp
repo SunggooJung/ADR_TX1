@@ -1,27 +1,33 @@
-﻿/// OVERALL COMMON SIGN : X -> roll, aileron   Y -> pitch, elevator   Z-> heave
+﻿///FCC_seiral_nod For IROS ADR 2017
+/// OVERALL COMMON SIGN : X -> roll, aileron   Y -> pitch, elevator   Z-> heave
 /// ARRAY SEQUENCE: ENUM { X Y Z }
+///
 ///
 #include "DefineList.h"
 
-#define Kp_x                         (       0.4)
-#define Kd_x                         (       0.0)
+#define Kp_x                         (        70)
+#define Kp_v                         (      0.008)
+#define Kd_x                         (       0.37)
 #define Kp_y                         (       0.4)
 #define Kd_y                         (       0.1)
 #define Kp_z                         (       0.8)
 #define Kd_z                         (      0.05)
-#define Kp_psi                       (         1)
+#define Kp_psi                       (       0.3)
 
 #define eps                          ( 0.0000001)
 #define D2R                 (float ) (3.141592 / 180.0)
 #define SECOND                       (        20)
+#define FAIL                         (         0)
+#define MATCH                        (         1)
+#define VEL_FWD                      (       0.5)
+#define _GATE_THRES         (float ) (       1.0)
+#define _MIN_ALT            (float ) (       0.4)
+#define _ON                          (         1)
+#define _OFF                         (         0)
 
 
-bool    flag_roll          = 1  ;
-bool    flag_FM            = 0  ;
 int 	FdPort1                 ;
 // Serial Communication initialization
-int     time_flag   = 1         ;
-int     gate_num = 0            ;
 float   Y_cmd             = 2.0 ;
 float   pos_error_x_m     = 0.0 ;
 float   pos_error_y_m     = 0.0 ;
@@ -35,12 +41,29 @@ float   a_param, b_param        ;
 char    filename[50]            ;
 float height_m = 0.0;
 
+//Flags
+bool     flag_gate_num_counter  = 0 ;
+bool     flag_gate_check_on     = 0 ;
+bool     time_flag              = 0 ;
+bool     flag_FM                = 0 ;
+
+
 // Mission control
 float WP_x[3] = {0,0,0};
 float WP_y[3] = {0,0,0};
 float WP_z[3] = {0,0,0};
 float WP_psi[3] = {0,0,0};
 
+
+// custom variables
+int     count_mission_start = 0     ;
+int     count_ros           = 0     ;
+float   t_capt              = 0.0   ;
+float   t_rel               = 0.0   ;
+float   t_cur               = 0.0   ;
+int     gate_num            = 0     ;
+
+//For FCC COM.
 int OpenSerial(char *device_name);
 int CloseSerial(int fd);
 void updatedata(void);
@@ -49,6 +72,8 @@ void *serialreceive(void *fd);
 int DS_ParsingMainFuncArgs(int Arg_argc, char ** Arg_argv);
 void DS_OnboardLog(void);
 
+
+//Structures from DefineList.h
 struct senddata     	     tx;         
 struct struct_t_MessageBody  tx_data;
 struct struct_t_RXttyO       StrRXttyO;
@@ -71,6 +96,7 @@ float YawAngleMod(float ArgYawAngle_deg)
 
     if(Ret > 180.0)
     {
+
         Ret -= 360.0;
     }
     return Ret;
@@ -110,8 +136,9 @@ void Lidar(const sensor_msgs::Range &Lidar_Height_msg)
 void callback_serial_comm(const std_msgs::Float32MultiArray &msg)
 {
     img.pos_error_pixel[0] 		 = msg.data[0]; //lateral axis error
-    img.pos_error_pixel[1] 		 = msg.data[1]; //longitudinal axis error
+    img.pos_error_pixel[1] 		 = msg.data[1]; //heave axis error
     img.pos_error_pixel[2] 		 = msg.data[2]; //distance to gate
+    img.pos_error_pixel[3] 		 = msg.data[3]; //gate position error
 
     //r_data 		 = 0.0;
 
@@ -175,25 +202,31 @@ int main(int argc, char** argv)
         {
             std_msgs::Int8MultiArray fcc_info_msg;
 
+            t_cur = count_ros / 20.0;
+
             fcc_info_msg.data.clear();
             fcc_info_msg.data.resize(4);
             fcc_info_msg.data[0] = StrRXttyO.Mode_FlightMode;
             fcc_info_msg.data[1] = gate_num;
             fcc_info_msg.data[2] = height_m;
 
+            //cout << gate_num << "\n";
+            cout << "x: " << pos_error_x_m << "  CMD_psi:  " << cmd.PSI_out << "  Vel_x: " <<cmd.X_out<< "  Vel_x_opt: " << StrRXttyO.FlowXY_mps[0]<< "\n";
+	      
+
+
+            //cout << " x_correct: " << pos_error_x_m + img.pos_error_pixel[2]*tan((StrRXttyO.Cur_Att_deg[2])*D2R) <<"\n";
+            //*fabs(cos(StrRXttyO.Cur_Att_deg[2]*D2R*4.5)) << " x_cos: " << pos_error_x_m*fabs(cos(StrRXttyO.Cur_Att_deg[2]*D2R*4.5) + img.pos_error_pixel[2]*tan((StrRXttyO.Cur_Att_deg[2])*D2R) << "\n";
+
             if (StrRXttyO.Mode_FlightMode == 1)
             {
                 cout << "\n1. Attitude control Mode" << "\n";
-                gate_num = 0;
+                flag_FM = _OFF;
 
 
                 WP_psi[0] = ( 0.0 + 0.0 ) ;
-                WP_psi[1] = ( WP_psi[0] + 0.0 ) ;
+                WP_psi[1] = ( WP_psi[0] + 55.0 ) ;
                 WP_psi[2] = ( WP_psi[0] + 0.0 ) ;
-
-                WP_x[0] = 0.0       ;
-                WP_x[1] = 0.0       ;
-                WP_x[2] = 0.0       ;
 
                 WP_y[0] = 0.0       ;
                 WP_y[1] = 0.0       ;
@@ -206,32 +239,68 @@ int main(int argc, char** argv)
 
             if (StrRXttyO.Mode_FlightMode == 2)
             {
-                flag_FM = 1;
                 cout << "\n2. Optical Flow Mode" << "\n";
+
+                count_mission_start   = 0   ;
+                gate_num              = 0   ;
+                flag_FM               = _ON ;
+                flag_gate_num_counter = _OFF;
+                flag_gate_check_on    = _ON ;
+                time_flag             = _OFF;
+                t_capt                = 0.0 ;
+                t_rel                 = 0.0 ;
             }
 
-            if (StrRXttyO.Mode_FlightMode >= 3 && flag_FM == 1)
+            if (StrRXttyO.Mode_FlightMode >= 3 && flag_FM == _ON)
             {
                 cout << "\n3. Mission Mode" << "\n";
+                count_mission_start = count_mission_start + 1;
 
                 cmd_pos_psi = WP_psi[gate_num];
                 cmd_pos_z   = WP_z[gate_num]  ;
                 cmd_pos_x   = WP_x[gate_num]  ;
                 cmd_pos_y   = WP_y[gate_num]  ;
 
-                float psi_error     = 0.0;//YawAngleMod(cmd_pos_psi - StrRXttyO.Cur_Att_deg[2]);
-                float posZ_error    = cmd_pos_z - height_m;
-                //float pos_error_x_m = img.pos_error_pixel[0];
+                float psi_error     = YawAngleMod(cmd_pos_psi - StrRXttyO.Cur_Att_deg[2] );
+                float posZ_error    = cmd_pos_z - height_m*cos(fabs(StrRXttyO.Cur_Att_deg[1])*D2R);
 
-                cmd.X_out = Kp_x*pos_error_x_m - StrRXttyO.FlowXY_mps[0]*Kd_x ;
-                cmd.Y_out = 0.0 ;
-                cmd.Z_out = -1.0*Kp_z*posZ_error;
-                cmd.PSI_out = Kp_psi*psi_error*1.0;
+		//float   pos_error_correct_m = pos_error_x_m + img.pos_error_pixel[2]*tan((StrRXttyO.Cur_Att_deg[2])*D2R);
+                float psi_LOS = Kp_x*pos_error_x_m - StrRXttyO.FlowXY_mps[0]*Kd_x;
 
-                cout << "x:   "   <<  pos_error_x_m << "   y:     " << Odom_zed.y <<  "  h:   " << height_m << "\n";
+                cmd.X_out = Kp_v*(psi_error+ psi_LOS)- StrRXttyO.FlowXY_mps[0]*Kd_x;//Kp_x*pos_error_x_m - StrRXttyO.FlowXY_mps[0]*Kd_x ; //lateral
+                cmd.Y_out = VEL_FWD ;                                               //longitudinal
+                cmd.Z_out = -1.0*Kp_z*posZ_error;                               //heave
+                cmd.PSI_out = Kp_psi*(psi_error+ psi_LOS);
 
+		cout <<  "psi_error: " << psi_error << " psi_LOS: " << psi_LOS << " psi_cur: " << StrRXttyO.Cur_Att_deg[2] << "\n";
+
+                if( (count_mission_start > 3*SECOND) && (height_m > _MIN_ALT) && (height_m < _GATE_THRES) && (flag_gate_check_on == _ON))
+                {
+                    flag_gate_num_counter   = _ON;
+                    flag_gate_check_on      = _OFF;
+                }
+
+                if( flag_gate_num_counter == _ON )
+                {
+                    gate_num              = gate_num+1;
+                    flag_gate_num_counter = _OFF;
+                    time_flag             = _ON;
+                }
+
+                if(time_flag == _ON)
+                {
+                    t_capt      = t_cur;
+                    time_flag   = _OFF;
+                }
+                t_rel = t_cur - t_capt;
+
+                if(t_rel > 1.5)
+                {
+                    flag_gate_check_on  = _ON   ;
+                    t_capt              = 0.0   ;
+                    t_rel               = 0.0   ;
+                }
              }
-
 
             updatedata();
             //===== Serial TX part=====//
@@ -244,7 +313,7 @@ int main(int argc, char** argv)
             }
 
             fcc_info_pub.publish(fcc_info_msg);
-
+            count_ros = count_ros + 1;
 
             // loop rate [Hz]
             loop_rate.sleep();
@@ -265,7 +334,7 @@ void updatedata(void)
     tx_data.FlagD        =0; // N/A
 
     tx_data.CmdVelAil = sat(cmd.X_out, 2.0);
-    tx_data.CmdVelEle = sat(cmd.Y_out, 1.0);
+    tx_data.CmdVelEle = sat(cmd.Y_out, 2.0);
     tx_data.CmdVelDown = sat(cmd.Z_out, 4.0);
     tx_data.CmdR_dps = sat(cmd.PSI_out, 15);
 

@@ -1053,7 +1053,7 @@ layer {
       label_map_file: "/home/ubuntu/catkin_ws/src/gate_detector/labelmap_frame_cp.prototxt"
     }
     code_type: CENTER_SIZE
-    keep_top_k: 4
+    keep_top_k: 1
     confidence_threshold: 0.01
   }
 }
