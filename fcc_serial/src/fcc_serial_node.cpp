@@ -2,24 +2,24 @@
 /// OVERALL COMMON SIGN : X -> roll, aileron   Y -> pitch, elevator   Z-> heave
 /// ARRAY SEQUENCE: ENUM { X Y Z }
 ///
-///
+#define LOG_SPECIFY
 #include "DefineList.h"
 
 #define Kp_x                         (        70)
-#define Kp_v                         (      0.008)
-#define Kd_x                         (       0.37)
+#define Kp_v                         (      0.025)
+#define Kd_x                         (       0.06)
 #define Kp_y                         (       0.4)
 #define Kd_y                         (       0.1)
 #define Kp_z                         (       0.8)
 #define Kd_z                         (      0.05)
-#define Kp_psi                       (       0.3)
+#define Kp_psi                       (       0.35)
 
 #define eps                          ( 0.0000001)
 #define D2R                 (float ) (3.141592 / 180.0)
 #define SECOND                       (        20)
 #define FAIL                         (         0)
 #define MATCH                        (         1)
-#define VEL_FWD                      (       0.5)
+#define VEL_FWD               (float)    (       0.5)
 #define _GATE_THRES         (float ) (       1.0)
 #define _MIN_ALT            (float ) (       0.4)
 #define _ON                          (         1)
@@ -198,6 +198,11 @@ int main(int argc, char** argv)
 		exit(0);
 	}
 
+#ifdef LOG_SPECIFY
+        sprintf(OutFileName,"/home/ubuntu/catkin_ws/src/fcc_serial/src/%s", "test");
+        pFile = fopen(strcat(OutFileName, ".out"), "w+t");
+#endif
+
 	while( ok() )
         {
             std_msgs::Int8MultiArray fcc_info_msg;
@@ -211,7 +216,7 @@ int main(int argc, char** argv)
             fcc_info_msg.data[2] = height_m;
 
             //cout << gate_num << "\n";
-            cout << "x: " << pos_error_x_m << "  CMD_psi:  " << cmd.PSI_out << "  Vel_x: " <<cmd.X_out<< "  Vel_x_opt: " << StrRXttyO.FlowXY_mps[0]<< "\n";
+            //cout << "x: " << pos_error_x_m << "  CMD_psi:  " << cmd.PSI_out << "  Vel_x: " <<cmd.X_out<< "  Vel_x_opt: " << StrRXttyO.FlowXY_mps[0]<< "\n";
 	      
 
 
@@ -255,6 +260,7 @@ int main(int argc, char** argv)
             {
                 cout << "\n3. Mission Mode" << "\n";
                 count_mission_start = count_mission_start + 1;
+		pos_error_x_m = sat(pos_error_x_m, 0.8);
 
                 cmd_pos_psi = WP_psi[gate_num];
                 cmd_pos_z   = WP_z[gate_num]  ;
@@ -267,12 +273,13 @@ int main(int argc, char** argv)
 		//float   pos_error_correct_m = pos_error_x_m + img.pos_error_pixel[2]*tan((StrRXttyO.Cur_Att_deg[2])*D2R);
                 float psi_LOS = Kp_x*pos_error_x_m - StrRXttyO.FlowXY_mps[0]*Kd_x;
 
-                cmd.X_out = Kp_v*(psi_error+ psi_LOS)- StrRXttyO.FlowXY_mps[0]*Kd_x;//Kp_x*pos_error_x_m - StrRXttyO.FlowXY_mps[0]*Kd_x ; //lateral
-                cmd.Y_out = VEL_FWD ;                                               //longitudinal
+                cmd.X_out = Kp_v*(psi_LOS);//Kp_x*pos_error_x_m - StrRXttyO.FlowXY_mps[0]*Kd_x ; //lateral
+                cmd.Y_out = sqrt( pow(VEL_FWD, 2) - pow( sat(cmd.X_out,VEL_FWD), 2) ) ;                                               //longitudinal
                 cmd.Z_out = -1.0*Kp_z*posZ_error;                               //heave
                 cmd.PSI_out = Kp_psi*(psi_error+ psi_LOS);
 
-		cout <<  "psi_error: " << psi_error << " psi_LOS: " << psi_LOS << " psi_cur: " << StrRXttyO.Cur_Att_deg[2] << "\n";
+		cout <<  "psi_error: " << psi_error << " cmdPSI: " << cmd.PSI_out << "\n";
+		cout <<  " X_error: " << pos_error_x_m  <<  "cmdRoll: " << cmd.X_out << "\n";
 
                 if( (count_mission_start > 3*SECOND) && (height_m > _MIN_ALT) && (height_m < _GATE_THRES) && (flag_gate_check_on == _ON))
                 {
@@ -300,6 +307,9 @@ int main(int argc, char** argv)
                     t_capt              = 0.0   ;
                     t_rel               = 0.0   ;
                 }
+#ifdef LOG_SPECIFY
+            fprintf(pFile, "%.4f %.4f %.4f %.4f\n", psi_error, cmd.PSI_out, pos_error_x_m, cmd.X_out);
+#endif
              }
 
             updatedata();
