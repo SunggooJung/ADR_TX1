@@ -230,14 +230,14 @@ int main(int argc, char** argv)
 
 
                 WP_psi[0] = ( 0.0 + 0.0 ) ;
-                WP_psi[1] = ( WP_psi[0] + 55.0 ) ;
+                WP_psi[1] = ( WP_psi[0] + 0.0 ) ;
                 WP_psi[2] = ( WP_psi[0] + 0.0 ) ;
 
                 WP_y[0] = 0.0       ;
                 WP_y[1] = 0.0       ;
                 WP_y[2] = 0.0       ;
 
-                WP_z[0] = 1.65          ;
+                WP_z[0] = 1.95          ;
                 WP_z[1] = 2.15          ;
                 WP_z[2] = 1.65          ;
             }
@@ -308,7 +308,7 @@ int main(int argc, char** argv)
                     t_rel               = 0.0   ;
                 }
 #ifdef LOG_SPECIFY
-            fprintf(pFile, "%.4f %.4f %.4f %.4f\n", psi_error, cmd.PSI_out, pos_error_x_m, cmd.X_out);
+             fprintf(pFile, "%d %d %.4f %.4f %.4f %.4f\n", StrRXttyO.Mode_FlightMode, gate_num, psi_error, cmd.PSI_out, pos_error_x_m, cmd.X_out);
 #endif
              }
 
