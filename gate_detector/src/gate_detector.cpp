@@ -9,11 +9,17 @@
 #define WIDTH_OFFSET  0
 #define HEIGHT_OFFSET 0
 
+
 #include "Header.h"
+//#include "time.h"
+//#include "sys/timeb.h"
 struct RectBoundInfo    BndInfo;
 int fcc_Flight_Mode;
 int gate_num;
 int cur_h;
+//int count_timesss = 0;
+//float mHzSSD = 0.0;
+//float SumSSD= 0.0;
 
 void FccCallback(const std_msgs::Int8MultiArray &msg)
 {
@@ -21,8 +27,6 @@ void FccCallback(const std_msgs::Int8MultiArray &msg)
     gate_num             = msg.data[1];
     cur_h                = msg.data[2];
 }
-
-
 
 class ImageConverter
 {
@@ -117,6 +121,8 @@ Detector::Detector(const string& model_file,
 }
 
 std::vector<vector<float> > Detector::Detect(const cv::Mat& img) {
+
+
     Blob<float>* input_layer = net_->input_blobs()[0];
     input_layer->Reshape(1, num_channels_,
                        input_geometry_.height, input_geometry_.width);
@@ -128,6 +134,12 @@ std::vector<vector<float> > Detector::Detect(const cv::Mat& img) {
     WrapInputLayer(&input_channels);
 
     Preprocess(img, &input_channels);
+
+//    long long int stamp, stmp_late;
+//    struct timeb timer_msec;
+
+//    struct timespec tstart={0,0}, tend={0,0};
+//        clock_gettime(CLOCK_MONOTONIC, &tstart);
 
     net_->Forward();
 
@@ -146,6 +158,25 @@ std::vector<vector<float> > Detector::Detect(const cv::Mat& img) {
         detections.push_back(detection);
         result += 7;
     }
+//    clock_gettime(CLOCK_MONOTONIC, &tend);
+
+//    count_timesss = count_timesss + 1;
+
+//    if (count_timesss < 5)
+//    {
+//        //SumSSD += fabs(stamp-stmp_late);
+//        SumSSD += (((double)tend.tv_sec + 1.0e-9*tend.tv_nsec) - ((double)tstart.tv_sec + 1.0e-9*tstart.tv_nsec))*1000;
+//    }
+//    else
+//    {
+//      //  cout << "sum" << SumSSD<< "\n";
+//     //   cout << "diff"<< (((double)tend.tv_sec + 1.0e-9*tend.tv_nsec) - ((double)tstart.tv_sec + 1.0e-9*tstart.tv_nsec))*1000 << "\n";
+//        mHzSSD = SumSSD/5.0;
+//        count_timesss = 0;
+//        SumSSD = 0.0;
+//        cout << mHzSSD << "\n";
+//    }
+
     return detections;
 }
 
@@ -273,6 +304,9 @@ int main(int argc, char** argv)
 {
 //    paths for caffe network inference
     string model_path = "/home/ubuntu/catkin_ws/src/gate_detector/mod_alex_ssd_deploy.prototxt";
+ //   string model_path = "/home/ubuntu/sunyou/alex_ssd_deploy.prototxt";
+  //     string model_path = "/home/ubuntu/sunyou/ssd_deploy.prototxt";
+
     string weights_path = "/home/ubuntu/catkin_ws/src/gate_detector/alx_iter_120000.caffemodel";
 
     cv::Point pt1;

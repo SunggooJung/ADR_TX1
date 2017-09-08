@@ -7,7 +7,7 @@
 
 #define Kp_x                         (        70)
 #define Kp_v                         (      0.025)
-#define Kd_x                         (       0.06)
+#define Kd_x                         (       0.16) //0.06
 #define Kp_y                         (       0.4)
 #define Kd_y                         (       0.1)
 #define Kp_z                         (       0.8)
@@ -19,9 +19,9 @@
 #define SECOND                       (        20)
 #define FAIL                         (         0)
 #define MATCH                        (         1)
-#define VEL_FWD               (float)    (       0.5)
-#define _GATE_THRES         (float ) (       1.0)
-#define _MIN_ALT            (float ) (       0.4)
+#define VEL_FWD               (float)    (       0.6)
+#define _GATE_THRES         (float ) (       0.9)
+#define _MIN_ALT            (float ) (       0.05)
 #define _ON                          (         1)
 #define _OFF                         (         0)
 
@@ -31,10 +31,10 @@ int 	FdPort1                 ;
 float   Y_cmd             = 2.0 ;
 float   pos_error_x_m     = 0.0 ;
 float   pos_error_y_m     = 0.0 ;
-float   cmd_pos_x         = 0.0 ;
-float   cmd_pos_y         = 0.0 ;
 float   cmd_pos_z         = 0.0 ;
 float   cmd_pos_psi       = 0.0 ;
+float   psi_cmd           = 0.0 ;
+float   del_psi           = 0.0 ;
 float 	h                       ;
 float   r_data                  ;
 float   a_param, b_param        ;
@@ -49,10 +49,8 @@ bool     flag_FM                = 0 ;
 
 
 // Mission control
-float WP_x[3] = {0,0,0};
-float WP_y[3] = {0,0,0};
-float WP_z[3] = {0,0,0};
-float WP_psi[3] = {0,0,0};
+float WP_z[10] = {0,0,0,0,0,0,0,0.0,0};
+float WP_psi[10] = {0,0,0,0,0,0,0,0.0,0};
 
 
 // custom variables
@@ -231,15 +229,25 @@ int main(int argc, char** argv)
 
                 WP_psi[0] = ( 0.0 + 0.0 ) ;
                 WP_psi[1] = ( WP_psi[0] + 0.0 ) ;
-                WP_psi[2] = ( WP_psi[0] + 0.0 ) ;
+                WP_psi[2] = ( WP_psi[0] + 30.0 ) ;
+                WP_psi[3] = ( WP_psi[0] + 40.0 ) ;
+                WP_psi[4] = ( WP_psi[0] + 90.0 ) ;
+                WP_psi[5] = ( WP_psi[0] + 90.0 ) ;
+                WP_psi[6] = ( WP_psi[0] + 90.0 ) ;
+                WP_psi[7] = ( WP_psi[0] + 90.0 ) ;
+                WP_psi[8] = ( WP_psi[0] + 130.0 ) ;
+                WP_psi[9] = ( WP_psi[0] + 90.0 ) ;
 
-                WP_y[0] = 0.0       ;
-                WP_y[1] = 0.0       ;
-                WP_y[2] = 0.0       ;
-
-                WP_z[0] = 1.95          ;
-                WP_z[1] = 2.15          ;
-                WP_z[2] = 1.65          ;
+                WP_z[0] = 1.90          ;
+                WP_z[1] = 1.75          ;
+                WP_z[2] = 2.25          ;
+                WP_z[3] = 2.25          ;
+                WP_z[4] = 2.25          ;
+                WP_z[5] = 2.25          ;
+                WP_z[6] = 2.45          ;
+                WP_z[7] = 2.75          ;
+                WP_z[8] = 2.75          ;
+                WP_z[9] = 1.65          ;
             }
 
             if (StrRXttyO.Mode_FlightMode == 2)
@@ -263,9 +271,7 @@ int main(int argc, char** argv)
 		pos_error_x_m = sat(pos_error_x_m, 0.8);
 
                 cmd_pos_psi = WP_psi[gate_num];
-                cmd_pos_z   = WP_z[gate_num]  ;
-                cmd_pos_x   = WP_x[gate_num]  ;
-                cmd_pos_y   = WP_y[gate_num]  ;
+                cmd_pos_z   = WP_z[gate_num]  ;                
 
                 float psi_error     = YawAngleMod(cmd_pos_psi - StrRXttyO.Cur_Att_deg[2] );
                 float posZ_error    = cmd_pos_z - height_m*cos(fabs(StrRXttyO.Cur_Att_deg[1])*D2R);
@@ -274,9 +280,13 @@ int main(int argc, char** argv)
                 float psi_LOS = Kp_x*pos_error_x_m - StrRXttyO.FlowXY_mps[0]*Kd_x;
 
                 cmd.X_out = Kp_v*(psi_LOS);//Kp_x*pos_error_x_m - StrRXttyO.FlowXY_mps[0]*Kd_x ; //lateral
-                cmd.Y_out = sqrt( pow(VEL_FWD, 2) - pow( sat(cmd.X_out,VEL_FWD), 2) ) ;                                               //longitudinal
-                cmd.Z_out = -1.0*Kp_z*posZ_error;                               //heave
+                cmd.Y_out = sqrt( pow(VEL_FWD, 2) - pow( sat(cmd.X_out,VEL_FWD), 2) ) ;          //longitudinal
+                cmd.Z_out = -1.0*Kp_z*posZ_error;                                                //heave
                 cmd.PSI_out = Kp_psi*(psi_error+ psi_LOS);
+
+                psi_cmd = cmd_pos_psi + psi_LOS;
+                del_psi = cmd_pos_psi + psi_LOS - StrRXttyO.Cur_Att_deg[2];
+
 
 		cout <<  "psi_error: " << psi_error << " cmdPSI: " << cmd.PSI_out << "\n";
 		cout <<  " X_error: " << pos_error_x_m  <<  "cmdRoll: " << cmd.X_out << "\n";
@@ -307,10 +317,12 @@ int main(int argc, char** argv)
                     t_capt              = 0.0   ;
                     t_rel               = 0.0   ;
                 }
-#ifdef LOG_SPECIFY
-             fprintf(pFile, "%d %d %.4f %.4f %.4f %.4f\n", StrRXttyO.Mode_FlightMode, gate_num, psi_error, cmd.PSI_out, pos_error_x_m, cmd.X_out);
-#endif
              }
+
+#ifdef LOG_SPECIFY
+             //fprintf(pFile, "%.4f %d %d %.4f %.4f %.4f %.4f %.4f %.4f\n", t_cur, StrRXttyO.Mode_FlightMode, gate_num, psi_error, psi_LOS, cmd.PSI_out, pos_error_x_m, cmd.X_out, StrRXttyO.FlowXY_mps[0]*Kd_x);
+            fprintf(pFile, "%.4f %d %d %.4f %.4f %.4f %.4f %.4f %.4f\n", t_cur, StrRXttyO.Mode_FlightMode, gate_num, psi_cmd, StrRXttyO.Cur_Att_deg[2], del_psi, pos_error_x_m, cmd.X_out, StrRXttyO.FlowXY_mps[0]);
+#endif
 
             updatedata();
             //===== Serial TX part=====//
