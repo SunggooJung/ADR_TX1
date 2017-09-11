@@ -60,6 +60,7 @@ float   t_capt              = 0.0   ;
 float   t_rel               = 0.0   ;
 float   t_cur               = 0.0   ;
 int     gate_num            = 0     ;
+int	test_counter	    = 0     ;
 
 //For FCC COM.
 int OpenSerial(char *device_name);
@@ -225,6 +226,7 @@ int main(int argc, char** argv)
             {
                 cout << "\n1. Attitude control Mode" << "\n";
                 flag_FM = _OFF;
+		test_counter = 2;
 
 
                 WP_psi[0] = ( 0.0 + 0.0 ) ;
@@ -262,6 +264,7 @@ int main(int argc, char** argv)
                 time_flag             = _OFF;
                 t_capt                = 0.0 ;
                 t_rel                 = 0.0 ;
+		test_counter = test_counter+1;
             }
 
             if (StrRXttyO.Mode_FlightMode >= 3 && flag_FM == _ON)
