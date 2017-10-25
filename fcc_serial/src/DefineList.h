@@ -7,6 +7,7 @@
 /// publish message type
 #include <std_msgs/Float32MultiArray.h>
 #include <std_msgs/Int8.h>
+#include <std_msgs/Float64.h>
 #include <std_msgs/Int8MultiArray.h>
 #include "sensor_msgs/Imu.h"
 #include "geometry_msgs/Twist.h"
@@ -66,10 +67,10 @@ struct senddata
 #pragma pack(1)
 struct struct_t_MessageBody // Always Make 40 Bytes
 {
-	unsigned char   FlagA;
-        unsigned char   Flag_Sensing;
-	unsigned char   FlagC;
-	unsigned char   FlagD;
+        int8_t          FlagA;
+        int8_t          Flag_Sensing;
+        int8_t          FlagC;
+        int8_t          FlagD;
 	float 		CmdVelAil;
 	float 		CmdVelEle;
 	float 		CmdVelDown;

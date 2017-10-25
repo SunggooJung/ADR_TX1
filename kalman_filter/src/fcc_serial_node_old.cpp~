@@ -1,0 +1,728 @@
+// essential header for ROS-OpenCV operation
+#include <ros/ros.h>
+#include <image_transport/image_transport.h>
+#include <cv_bridge/cv_bridge.h>
+#include <tf/transform_broadcaster.h>
+
+
+/// publish message type
+#include <std_msgs/Float32MultiArray.h>
+#include "sensor_msgs/Imu.h"
+#include "geometry_msgs/Twist.h"
+#include <nav_msgs/Odometry.h>
+
+
+// for using serial communication
+#include <unistd.h>
+#include <fcntl.h>
+#include <termios.h>
+#include <pthread.h>
+#include "DefineList.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <math.h>
+
+//#define WP_MODE
+#define HOVER_MODE
+//#define TASK_HOVER_by_ODOM
+#define TASK_HOVER_by_OBS
+
+#define Kp_x                         (       0.3)
+#define Kd_x                         (      0.00)
+#define Kp_y                         (       0.3)
+#define Kd_y                         (      0.00)
+#define Kp_z                         (       0.3)
+#define Kp_psi                         (       1)
+#define Filter_Coeff        ( int  ) (       180)
+#define WP_DIST_REF                  (       0.5)
+#define eps                          ( 0.0000001)
+#define HOVER_ALTITUDE               (     -1.50)
+
+// Serial Communication initialization
+int 	FdPort1;
+int     count_ros = 0;
+float   t_capt = 0.0;
+float   t_rel = 0.0;
+float   t = 0.0;
+float   a_param, b_param;
+
+float int_pre = 0.0       ;
+float int_err_pre = 0.0   ;
+float out_d_pre = 0.0     ;
+float error_pre = 0.0     ;
+float out_yd_pre = 0.0     ;
+float error_ypre = 0.0     ;
+
+float   Ka = 0.98;
+float   Ks = 0.02;
+float   dt = 0.05;
+float   a = 2.84;
+
+float 	x_data;
+float 	y_data;
+float 	z_data;
+float   r_data;
+float 	h;
+int 	flag_det;
+int     flag_receive;
+int     flag_mission;
+char    filename[50];
+
+float X_out;
+float Y_out;
+float Z_out;
+float PSI_out;
+
+// Mission control
+int IDX_WP = 0;
+int flag_FM = 0;
+int MISSION_MODE_ON = 0;
+int count_hover = 0;
+float cmd_pos_x = 0.0;
+float cmd_pos_y = 0.0;
+float cmd_pos_z = 0.0;
+float cmd_pos_psi = 0.0;
+
+float WP_x[4];
+float WP_y[4];
+float WP_z[4];
+float WP_psi[4];
+
+int OpenSerial(char *device_name);
+int CloseSerial(int fd);
+void updatedata(void);
+void serialsend(int fd);
+void *serialreceive(void *fd);
+int DS_ParsingMainFuncArgs(int Arg_argc, char ** Arg_argv);
+void DS_OnboardLog(void);
+
+struct senddata     	     tx;         
+struct struct_t_MessageBody  tx_data;
+struct struct_t_RXttyO       StrRXttyO;
+struct struct_t_MainFuncArgs StrMainFuncArgs;
+struct Odometry_zed     Odom_zed;
+
+
+// setup the initial name
+using namespace ros;
+using namespace std;
+
+// for publishing the data
+std_msgs::Float32MultiArray receive_data;
+
+
+float sat(float data, float max)
+{
+    float res;
+
+    if(abs(data) > max)
+        res = (data + eps)/abs(data + eps)*max;
+    else
+        res = data;
+
+    return res;
+}
+
+void ZedOdom(const nav_msgs::Odometry& zed_odom_msg)
+{
+    Odom_zed.x = -zed_odom_msg.pose.pose.position.y;
+    Odom_zed.y = zed_odom_msg.pose.pose.position.x;
+    Odom_zed.z = zed_odom_msg.pose.pose.position.z;
+}
+
+void callback_serial_comm(const geometry_msgs::Twist &msg)
+{
+    x_data 		 = msg.linear.x;
+    y_data 		 = msg.linear.y;
+    z_data 		 = msg.linear.z;
+    r_data 		 = msg.angular.z;
+}
+
+float integration(float error){
+
+    float int_out;
+    int_out = 0.5*(dt*error + dt*int_err_pre + 2*int_pre);   //error integration, tustin method.
+    int_pre = int_out;
+    int_err_pre = error;
+
+    return int_out;
+}
+
+float differentiation(float error){
+
+    float out_d;
+
+    out_d = ( 2.0*Filter_Coeff*( error - error_pre ) + ( 2.0 - Filter_Coeff*dt )*out_d_pre ) / ( 2.0 + Filter_Coeff*dt );
+    out_d_pre = out_d;
+    error_pre = error;
+
+    return out_d;
+}
+
+float differentiation_y(float error){
+
+    float out_yd;
+
+    out_yd = ( 2.0*Filter_Coeff*( error - error_ypre ) + ( 2.0 - Filter_Coeff*dt )*out_yd_pre ) / ( 2.0 + Filter_Coeff*dt );
+    out_yd_pre = out_yd;
+    error_ypre = error;
+
+    return out_yd;
+
+}
+
+// node main loop, for ROS
+int main(int argc, char** argv)
+{
+   static FILE* pFile;
+   char OutFileName[12] = {" "};
+
+	if(DS_ParsingMainFuncArgs(argc, argv) == 1)
+	{
+		printf("[DONE] Parsing main function arguments\n");
+	}
+	else
+	{
+		printf("[ERROR] 'DS_ParsingMainFuncArgs()'\n");
+		return -1;
+
+	}
+
+
+	// node name initialization
+	init(argc, argv, "FCC_serial");
+
+	// assign node handler
+	ros::NodeHandle nh_;
+
+	// for debugging
+	printf("Initiate: FCC_Serial_node\n");
+
+	// subscribing the image processing results (x_pos, y_pos)
+    Subscriber msg_data_input  = nh_.subscribe("/obstacle/center_info", 3, callback_serial_comm);
+    Subscriber zed_odom_sub_ = nh_.subscribe("/zedstereocam/odom", 1, &ZedOdom);    
+    Publisher  imu_pub = nh_.advertise<sensor_msgs::Imu>("imu/data_raw", 1000);
+    Publisher  pose_down_pub = nh_.advertise<std_msgs::Float32MultiArray>("pose_down/data_raw", 100);
+    Publisher  opt_flow_pub = nh_.advertise<geometry_msgs::Twist>("camera/opt_flow", 1);
+
+	receive_data.data.resize(10);
+
+	// setup the loop speed, [Hz], synchronizing the hector slam loop
+	ros::Rate loop_rate(20);
+
+	float fdt = (float)(1/20);
+
+	//===== Open Serial =====//
+	FdPort1 = OpenSerial(PORT1);
+
+	//===== pthread create =====//
+	pthread_t p_thread;
+	int thread_rx;
+
+	thread_rx = pthread_create(&p_thread, NULL, serialreceive, (void *)FdPort1);
+
+	if(thread_rx < 0)
+	{
+		perror("thread create error : ");
+		exit(0);
+	}
+
+    sprintf(OutFileName,"/home/ubuntu/catkin_ws/src/fcc_serial/src/%s", "ODOM");
+    pFile = fopen(strcat(OutFileName, ".out"), "w+t");
+    // node loop, for ROS, check ros status, ros::ok()
+    float pos_x = 0.0;
+    float pos_y = 0.0;
+    float pos_x_2nd = 0.0;
+    float pos_y_2nd = 0.0;
+    float Err_Pos_x_int = 0.0;
+    float Err_Pos_y_int = 0.0;
+
+	while( ok() )
+    {
+        /// messages
+        sensor_msgs::Imu imu_msg;
+        std_msgs::Float32MultiArray pose_down_msg;
+        geometry_msgs::Twist opt_flow_msg;
+
+
+        /// Imu data read fcc -> Tk1
+        imu_msg.header.stamp = ros::Time::now();
+        imu_msg.header.frame_id = "imu";
+
+        for (int i = 0; i < 9; i++)
+         {
+           imu_msg.linear_acceleration_covariance[i] = 0.0;
+           imu_msg.angular_velocity_covariance[i] = 0.0;
+           imu_msg.orientation_covariance[i] = 0.0;
+         }
+
+        imu_msg.orientation.x = StrRXttyO.Cur_Att_deg[1];
+        imu_msg.orientation.y = StrRXttyO.Cur_Att_deg[0];
+        imu_msg.orientation.z = StrRXttyO.Cur_Att_deg[2];
+
+        imu_msg.angular_velocity.x = StrRXttyO.Cur_AngularRate_dps[1];
+        imu_msg.angular_velocity.y = StrRXttyO.Cur_AngularRate_dps[0];
+        imu_msg.angular_velocity.z = StrRXttyO.Cur_AngularRate_dps[2];
+
+        imu_msg.linear_acceleration.x = StrRXttyO.Cur_LinAccAED_mpss[1];
+        imu_msg.linear_acceleration.y = StrRXttyO.Cur_LinAccAED_mpss[0];
+        imu_msg.linear_acceleration.z = StrRXttyO.Cur_LinAccAED_mpss[2];
+
+        /// Lidar altimeter & barometer altitude data read fcc -> tk1
+        pose_down_msg.data.clear();
+        pose_down_msg.data.resize(4);
+        pose_down_msg.data[0] = StrRXttyO.LidarPosDown_m;
+        pose_down_msg.data[1] = StrRXttyO.BaroPosDown_m;
+        pose_down_msg.data[2] = StrRXttyO.Cur_PosNED_m[2];
+        pose_down_msg.data[3] = StrRXttyO.GNSS_SatNum;
+
+
+        /// Optical flow data read
+        opt_flow_msg.linear.x = StrRXttyO.FlowXY_mps[0];
+        opt_flow_msg.linear.y = StrRXttyO.FlowXY_mps[1];
+
+
+        // complimentary filter with zed odometry and px4flow velocity
+        float Err_Pos_x_2nd = (pos_x_2nd - Odom_zed.x);
+        Err_Pos_x_int = Err_Pos_x_int + Err_Pos_x_2nd*dt;
+        float tempPos_x_2nd = opt_flow_msg.linear.x - Ka*Err_Pos_x_2nd - Ks*Err_Pos_x_int;
+        pos_x_2nd = pos_x_2nd + tempPos_x_2nd*dt;
+        //pos_x_2nd =  - pos_x_2nd;
+
+        float Err_Pos_y_2nd = (pos_y_2nd - Odom_zed.y);
+        Err_Pos_y_int = Err_Pos_y_int + Err_Pos_y_2nd*dt;
+        float tempPos_y_2nd = opt_flow_msg.linear.y - Ka*Err_Pos_y_2nd - Ks*Err_Pos_y_int;
+        pos_y_2nd = pos_y_2nd + tempPos_y_2nd*dt;
+
+        cout << "\nWP_IDX :" << IDX_WP << "  CmdPos_x : " << cmd_pos_x<< "  CmdPos_y : " << cmd_pos_y << "  CmdPos_z : " << cmd_pos_z << "  CmdPos_psi : " << cmd_pos_psi <<"\n";
+        cout << "-----------CurPos_x : " << pos_x_2nd << "  CurPos_y : " << pos_y_2nd << "\n";
+        cout << "-----------ImgCmd_x : " << x_data << "  ImgCmd_y : " << y_data << "\n";
+        cout << StrRXttyO.Cur_Att_deg[2] << "  " <<StrRXttyO.LidarPosDown_m << "  "  << Odom_zed.x << "  " << Odom_zed.y << "  " << opt_flow_msg.linear.x << "  " << opt_flow_msg.linear.y <<"\n";
+
+        if (StrRXttyO.Mode_FlightMode == 1)
+        {
+            cout << "\n1. Attitude control Mode" << "\n";
+            WP_psi[0] = StrRXttyO.Cur_Att_deg[2];
+        }
+
+        if (StrRXttyO.Mode_FlightMode == 2)
+        {
+            flag_FM = 1;
+            MISSION_MODE_ON = 0;
+            cout << "\n2. Optical Flow Mode" << "\n";
+        }
+
+        if (StrRXttyO.Mode_FlightMode == 3 && flag_FM == 1)
+        {
+            WP_x[0] = pos_x_2nd;
+            WP_y[0] = pos_y_2nd;
+            //WP_psi[0] = 0.000;
+
+            // WP A
+            WP_x[1] = WP_x[0] + 1.0;
+            WP_y[1] = WP_y[0] + 0.0;
+
+            // WP B
+            WP_x[2] = WP_x[0] + 1.0;
+            WP_y[2] = WP_y[0] + 1.0;
+
+            // WP C
+            WP_x[3] = WP_x[0] + 0.0;
+            WP_y[3] = WP_y[0] + 1.0;
+
+            flag_FM = 0;            
+            IDX_WP  = 0;
+            count_hover = 0;
+            MISSION_MODE_ON = 1;
+        }
+
+        if (MISSION_MODE_ON)
+        {
+            cout << "\n3. Mission Mode, WP FLIGHT START.. " << "\n";
+            count_hover = count_hover + 1;
+
+            // Hovering control
+
+#ifdef WP_MODE
+            cmd_pos_x = WP_x[IDX_WP];
+            cmd_pos_y = WP_y[IDX_WP];
+#endif
+
+#ifdef HOVER_MODE
+            cmd_pos_x = WP_x[0];
+            cmd_pos_y = WP_y[0];
+            cmd_pos_z = HOVER_ALTITUDE;
+            cmd_pos_psi = WP_psi[0];
+
+#endif
+            float posX_error = cmd_pos_x   - pos_x_2nd;
+            float posY_error = cmd_pos_y   - pos_y_2nd;
+            float posZ_error = cmd_pos_z   - StrRXttyO.LidarPosDown_m;
+            float psi_error  = cmd_pos_psi - StrRXttyO.Cur_Att_deg[2];
+
+            float X_int = integration(posX_error);
+            float X_diff = differentiation(posX_error);
+            float Y_diff = differentiation_y(posY_error);
+
+            X_out = Kp_x*posX_error - Kd_x*X_diff;
+            Y_out = Kp_y*posY_error - Kd_y*Y_diff;
+            Z_out = Kp_z*posZ_error;
+            PSI_out = Kp_psi*psi_error*5.0;
+
+            cout << "Vel_Cmd_x : " << X_out << " Vel_Cmd_y : " << Y_out <<" Vel_Cmd_z : " << Z_out <<" Vel_Cmd_psi : " << PSI_out <<"\n";;
+
+            float POS_dist = sqrt(posX_error*posX_error + posY_error*posY_error);
+
+            if(POS_dist < WP_DIST_REF)
+            {
+                IDX_WP = IDX_WP + 1;
+
+                if (IDX_WP == 4 )
+                {
+                    IDX_WP = 0 ;
+                }
+            }    
+            fprintf(pFile, "%.4lf %.4lf %.4lf %.4lf %.4lf %.4lf %.4lf %.4lf\n", Odom_zed.x, Odom_zed.y, X_out, Y_out, cmd_pos_x, cmd_pos_y, pos_x_2nd, pos_y_2nd);
+        }
+
+
+        //cout << opt_flow_msg.linear.y << "  " << imu_msg.orientation.y <<  "\n";
+        updatedata();
+
+		//===== Serial TX part=====//
+		serialsend(FdPort1);
+
+        if(StrMainFuncArgs.Flag_Args[0] == 1) // Case of Activating Onboard Logging
+		{
+			//printf("Debug OnboadLog\n");
+			DS_OnboardLog();
+        }
+
+		// loop rate [Hz]
+		loop_rate.sleep();
+
+		count_ros = count_ros + 1;
+
+        imu_pub.publish(imu_msg);
+        pose_down_pub.publish(pose_down_msg);
+        opt_flow_pub.publish(opt_flow_msg);
+
+        // loop sampling, ros
+		spinOnce();
+	}
+	// for debugging
+	printf("Terminate: FCC_Serial_node\n");
+
+	return 0;
+}
+
+
+
+void updatedata(void)
+{
+    /// tx_data update
+    tx_data.FlagA   =0;
+    tx_data.FlagB   =0;
+    tx_data.FlagC   =0;
+    tx_data.FlagD   =0;
+
+#ifdef TASK_HOVER_by_ODOM
+    tx_data.CmdVelAil = sat(X_out, 0.5);
+    tx_data.CmdVelEle = sat(Y_out, 0.5);
+    tx_data.CmdVelDown = sat(Z_out, 0.5);
+    tx_data.CmdR_dps = sat(PSI_out, 30);
+#endif
+
+#ifdef TASK_HOVER_by_OBS
+   tx_data.CmdVelAil = sat(x_data, 1.0);
+   tx_data.CmdVelEle = sat(y_data, 1.0);
+   tx_data.CmdVelDown = sat(z_data, 0.5);
+   tx_data.CmdR_dps = sat(PSI_out, 30);
+#endif
+
+
+    unsigned char *data = (unsigned char *)&tx_data;
+    memcpy((void *)(tx.Data),(void *)(data),sizeofdata);
+
+    printf("\n\n\n\n\n\n");
+    printf("FM : %d, flag : %d, t_rel : %.3f t : %.3f vz : %.3f",StrRXttyO.Mode_FlightMode,flag_mission,t_rel,t,tx_data.CmdVelDown);
+    printf(" time : %.3f\n",count_ros/20.0);
+    printf("CmdTK1_Vel : %.3f, %.3f, %3f ",tx_data.CmdVelAil,tx_data.CmdVelEle, tx_data.CmdR_dps);
+    printf("Cmd_Vel : %.3f, %.3f, %.3f ",StrRXttyO.Cmd_VelAED_mps[0],StrRXttyO.Cmd_VelAED_mps[1],StrRXttyO.Cmd_VelAED_mps[2]);
+    printf("Cur_Vel : %.3f %.3f %.3f ",StrRXttyO.Cur_VelAED_mps[0],StrRXttyO.Cur_VelAED_mps[1],StrRXttyO.Cur_VelAED_mps[2]);
+    printf("Cmd_Att : %.3f %.3f ",StrRXttyO.Cmd_Att_deg[0],StrRXttyO.Cmd_Att_deg[1]);
+    printf("Cur_Att : %.3f %.3f %.3f\n",StrRXttyO.Cur_Att_deg[0],StrRXttyO.Cur_Att_deg[1],StrRXttyO.Cur_Att_deg[2]);
+    printf("ANGRATE : %.3f\n", StrRXttyO.Cur_AngularRate_dps[0]);
+}
+
+void *serialreceive(void *fd)
+{
+
+	int datasize;
+	unsigned char RXRawData[sizeof(StrRXttyO)];
+
+	printf("pthread RX process start!\n");
+	while(1)
+	{
+		int ParsingMode   = 1;
+		int ContinueWhile = 1;
+		while(ContinueWhile)
+		{
+			switch(ParsingMode)
+			{
+			case 1:
+				if(read((int)fd, &RXRawData[0], 1) == 1)
+				{
+					if(RXRawData[0] == 0x12)
+					{
+						ParsingMode = 2;
+					}
+					else
+					{
+						ParsingMode = 1;
+					}
+				}
+				break;
+
+			case 2:
+				if(read((int)fd, &RXRawData[1], 1) == 1)
+				{
+					if(RXRawData[1] == 0x34)
+					{
+						ParsingMode = 3;
+					}
+					else
+					{
+						ParsingMode = 1;
+					}
+				}
+				break;
+
+			case 3:
+				if(read((int)fd, &RXRawData[2], 1) == 1)
+				{
+					if(RXRawData[2] == 0x56)
+					{
+						ParsingMode = 4;
+					}
+					else
+					{
+						ParsingMode = 1;
+					}
+				}
+				break;
+
+			case 4:
+				if(read((int)fd, &RXRawData[3], 1) == 1)
+				{
+					if(RXRawData[3] == 0x78)
+					{
+						ParsingMode = 5;
+					}
+					else
+					{
+						ParsingMode = 1;
+					}
+				}
+				break;
+
+			case 5:
+				if(read((int)fd,&RXRawData[4],(sizeof(StrRXttyO)-4)/2)==(sizeof(StrRXttyO)-4)/2)
+				{
+					if(read((int)fd,&RXRawData[4]+(sizeof(StrRXttyO)-4)/2,(sizeof(StrRXttyO)-4)/2)==(sizeof(StrRXttyO)-4)/2)
+					{
+						// Calculate Checksum
+						unsigned char CalChecksumA = 0;
+						unsigned char CalChecksumB = 0;
+
+						int Ind;
+
+						for(Ind = 0; Ind<(sizeof(StrRXttyO)-2); Ind++)
+						{
+							CalChecksumA += RXRawData[Ind];
+							CalChecksumB += CalChecksumA;
+						}
+
+						if((CalChecksumA == RXRawData[sizeof(StrRXttyO)-2])&&(CalChecksumB == RXRawData[sizeof(StrRXttyO)-1]))
+						{
+							memcpy((void *)(&StrRXttyO), (void *)(RXRawData), sizeof(StrRXttyO));
+							ContinueWhile = 0;
+						}
+						else
+						{
+							ParsingMode = 1;
+						}
+					}
+					else
+					{
+						ParsingMode = 1;
+					}
+				}
+				else
+				{
+					ParsingMode = 1;
+				}
+				break;
+
+			default:
+				ParsingMode = 1;
+				break;
+			}
+		}
+	}
+
+}
+
+void serialsend(int fd)
+{
+	//===== initial header =====//
+	tx.header[0] = header1;
+	tx.header[1] = header2;
+
+	tx.IDs[0] = IDs1;
+	tx.IDs[1] = IDs2;
+
+	tx.checksum[0] = 0;
+	tx.checksum[1] = 0;
+
+	unsigned char *data = (unsigned char *)&tx;
+
+	for(int ind=0; ind<sizeof(senddata)-2;ind++)
+	{
+		tx.checksum[0] += data[ind];
+		tx.checksum[1] += tx.checksum[0];
+	}
+	//printf("ckA : %d ckB : %d\n",tx.checksum[0],tx.checksum[1]);
+
+	write(fd,&tx,sizeof(senddata));
+}
+
+
+int OpenSerial(char *device_name)
+{
+	int fd;
+	struct termios newtio;
+
+	fd = open(device_name, O_RDWR | O_NOCTTY);
+
+	if(fd < 0)
+	{
+		printf("Serial Port Open Fail.\n");
+		return -1;
+	}
+
+	memset(&newtio, 0, sizeof(newtio));
+	newtio.c_iflag = IGNPAR;
+	newtio.c_oflag = 0;
+	newtio.c_cflag = CS8|CLOCAL|CREAD;
+
+	switch(BAUDRATE)
+	{
+		case 921600 : newtio.c_cflag |= B921600;
+		break;
+		case 115200 : newtio.c_cflag |= B115200;
+		break;
+		case 57600  : newtio.c_cflag |= B57600;
+		break;
+	}
+
+	newtio.c_lflag 		= 0;
+	newtio.c_cc[VTIME] 	= 0;
+	newtio.c_cc[VMIN] 	= sizeof(StrRXttyO)/2;
+
+	tcflush(fd,TCIFLUSH);
+	tcsetattr(fd,TCSANOW, &newtio);
+
+	return fd;
+}
+
+
+int CloseSerial(int fd)
+{
+	close(fd);
+}
+
+
+int DS_ParsingMainFuncArgs(int Arg_argc, char ** Arg_argv)
+{
+	// Initialization to set to 0
+	memset(&StrMainFuncArgs, 0, sizeof(StrMainFuncArgs));
+
+
+	// Assign Main Function Arguments
+	StrMainFuncArgs.PtrArr_Args[0]  = DF_MAIN_FUNC_ARG_00;
+	StrMainFuncArgs.PtrArr_Args[1]  = DF_MAIN_FUNC_ARG_01;
+	StrMainFuncArgs.PtrArr_Args[2]  = DF_MAIN_FUNC_ARG_02;
+	// ...
+	// ...
+	// ...
+	// ...
+	// ...
+
+
+	// Set Flags
+    if(Arg_argc > 2)
+	{
+		int TempIndA;
+		int TempIndB;
+
+		for(TempIndA = 2; TempIndA < Arg_argc; TempIndA++)
+		{
+			for(TempIndB = 0; TempIndB < DF_MAIN_FUNC_ARGS_MAX; TempIndB++)
+			{
+				if(strcmp(Arg_argv[TempIndA],StrMainFuncArgs.PtrArr_Args[TempIndB]) == 0)
+				{
+					StrMainFuncArgs.Flag_Args[TempIndB] = 1;
+					break;
+				}
+			}
+		}
+	}
+
+
+	// Get LogFileName
+    if(StrMainFuncArgs.Flag_Args[0] == 1) // Case of Activating Onboard Logging
+	{
+		printf("Type onboard log file name : ");
+		scanf("%1023s",&StrMainFuncArgs.OnboardLogFileName[0]);
+        sprintf(filename,"/home/ubuntu/%s",StrMainFuncArgs.OnboardLogFileName);
+    }
+	return 1;
+}
+
+
+void DS_OnboardLog(void)
+{
+	static int    Flag_Initialized = 0;
+	static FILE * FD_ONBOARD_LOG;
+
+	if(Flag_Initialized==0) // Not Initialized
+	{
+		FD_ONBOARD_LOG = fopen(filename,"wb"); // File Opening
+		if(FD_ONBOARD_LOG == NULL) // Open Error
+		{
+			printf("[ERROR] 'DS_OnboardLog()'\n");
+			exit(-1); // Terminate Program
+		}
+		else // Opening Success
+		{
+			fclose(FD_ONBOARD_LOG);
+			printf("[DONE] Creating onboard log file\n");
+			Flag_Initialized = 1; // Initialized
+		}
+	}
+
+	if(Flag_Initialized==1) // After Initializing
+	{
+		// Copy Data to Log File
+        FD_ONBOARD_LOG = fopen(filename,"ab"); // File Opening with Update Mode
+		fwrite(&StrRXttyO, sizeof(StrRXttyO), 1, FD_ONBOARD_LOG);
+		fclose(FD_ONBOARD_LOG);
+        cout << StrRXttyO.Cur_Time_sec << "\n";
+	}
+}
+
+
+

@@ -307,7 +307,7 @@ int main(int argc, char** argv)
  //   string model_path = "/home/ubuntu/sunyou/alex_ssd_deploy.prototxt";
   //     string model_path = "/home/ubuntu/sunyou/ssd_deploy.prototxt";
 
-    string weights_path = "/home/ubuntu/catkin_ws/src/gate_detector/alx_iter_120000.caffemodel";
+    string weights_path = "/home/ubuntu/catkin_ws/src/gate_detector/release_iter_120000.caffemodel";
 
     cv::Point pt1;
     cv::Point pt2;
@@ -377,12 +377,12 @@ int main(int argc, char** argv)
                 msg_gate_pos.data[2] = distance_to_obs;
                 msg_gate_pos.data[3] = pose_error;
 
-                sensor_msgs::ImagePtr fit_msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", rgb_frame).toImageMsg();
-
-                ic.gate_info_pub.publish(msg_gate_pos);                
-                ic.fit_pub_.publish(fit_msg);
-            }
+		sensor_msgs::ImagePtr fit_msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", rgb_frame).toImageMsg();
+                ic.gate_info_pub.publish(msg_gate_pos);
+        	ic.fit_pub_.publish(fit_msg);
+            }            
         }
+
 	//DONT TOUCH BELOW HERE 
         ros::spinOnce();
         cv::waitKey(20);

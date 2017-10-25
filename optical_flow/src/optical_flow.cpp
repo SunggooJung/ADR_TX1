@@ -29,7 +29,7 @@ public:
         : it_(nh_)
     {
         // Subscrive to input video feed and publish output video feed
-        image_sub_ = it_.subscribe("/zed/rgb/image_raw_color", 1, &ImageConverter::imageRgb, this);
+        image_sub_ = it_.subscribe("/usb_cam/image_raw", 1, &ImageConverter::imageRgb, this);
         Lidar_sub_ = nh_.subscribe("/terarangerone", 1, &Lidar);
         opt_flow_pub_ = nh_.advertise<geometry_msgs::Twist>("/camera/opt_flow", 1);
         opt_img_pub_ = it_.advertise("/opt_flow/image_flow", 1);
