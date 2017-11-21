@@ -1,4 +1,4 @@
-﻿///FCC_seiral_nod For IROS ADR 2017
+﻿///FCC_seiral_nod For A2DR (Airbus ADR) 2017
 /// OVERALL COMMON SIGN : X -> roll, aileron   Y -> pitch, elevator   Z-> heave
 /// ARRAY SEQUENCE: ENUM { X Y Z }
 ///

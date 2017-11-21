@@ -1,12 +1,11 @@
-﻿///FCC_seiral_nod For KBS Demo
-/// Sunggoo Jung 2017. 10. 25
+﻿///FCC_seiral_nod For 2nd Floor Demonstration 9 Gate
 /// OVERALL COMMON SIGN : X -> roll, aileron   Y -> pitch, elevator   Z-> heave
 /// ARRAY SEQUENCE: ENUM { X Y Z }
 ///
 #define LOG_SPECIFY
 #include "DefineList.h"
 
-#define Kp_x                         (        50)  // 50
+#define Kp_x                         (        48)  // 50
 #define Kp_v                         (     0.024)  //0.025
 #define Kd_x                         (       0.4) //0.2      0.25   0.16
 #define Kp_y                         (       0.4)
@@ -20,7 +19,7 @@
 #define SECOND                       (        20)
 #define FAIL                         (         0)
 #define MATCH                        (         1)
-#define VEL_FWD             (float)  (       0.5)
+#define VEL_FWD             (float)  (       0.6)
 #define _GATE_THRES         (float)  (       1.2)
 #define _MIN_ALT            (float)  (      0.05)
 #define _ON                          (         1)
@@ -219,23 +218,25 @@ int main(int argc, char** argv)
 
             WP_psi[0] = ( 0.0) ;
             WP_psi[1] = ( WP_psi[0] + 0.0 ) ;
-            WP_psi[2] = ( WP_psi[0] + 90.0 ) ;
-            WP_psi[3] = ( WP_psi[0] + 179.0 ) ;
-            WP_psi[4] = ( WP_psi[0] + 179.0 ) ;
-            WP_psi[5] = ( WP_psi[0] + 179.0 ) ;
-            WP_psi[6] = ( WP_psi[0] + 269.0 ) ;
-            WP_psi[7] = ( WP_psi[0] + 0.0 ) ;
-            WP_psi[8] = ( WP_psi[0] + 0.0 ) ;
-            WP_psi[9] = ( WP_psi[0] + 0.0 ) ;
+            WP_psi[2] = ( WP_psi[0] + 0.0 ) ;
+            WP_psi[3] = ( WP_psi[0] + 30.0 ) ;
+            WP_psi[4] = ( WP_psi[0] + 90.0 ) ;
+            WP_psi[5] = ( WP_psi[0] + 90.0 ) ;
+            WP_psi[6] = ( WP_psi[0] + 90.0 ) ;
+            WP_psi[7] = ( WP_psi[0] + 90.0 ) ;
+            WP_psi[8] = ( WP_psi[0] + 90.0 ) ;
+            WP_psi[9] = ( WP_psi[0] + 90.0 ) ;
 
-            WP_z[0] = 1.55          ;
-            WP_z[1] = 1.55          ;
-            WP_z[2] = 2.65          ;
-            WP_z[3] = 2.65          ;
-            WP_z[4] = 2.15          ;
-            WP_z[5] = 2.15          ;
-            WP_z[6] = 1.90          ;
-            WP_z[7] = 1.65          ;
+            WP_z[0] = 1.60          ;
+            WP_z[1] = 1.95          ;
+            WP_z[2] = 2.15          ;
+            WP_z[3] = 2.45          ;
+            WP_z[4] = 2.45          ;
+            WP_z[5] = 1.95          ;
+            WP_z[6] = 1.95          ;
+            WP_z[7] = 1.95          ;
+            WP_z[8] = 1.65          ;
+            WP_z[9] = 1.65          ;
         }
 
         if (StrRXttyO.Mode_FlightMode == 2)
@@ -308,30 +309,13 @@ int main(int argc, char** argv)
             }
 
 /// ---------------------------------------Straight Section----------------------------------------------------------
-            if (gate_num == 2 )
+            if (gate_num == 4 )
             {
                 count_adhoc = count_adhoc + 1;
 
-                if(count_adhoc < (_FORWARD-6)*SECOND)
+                if(count_adhoc < (_FORWARD-2.5)*SECOND)
                 {
-                    cout << "!!!!!!!!moving forward!!!!!!!" << "\n";
-                    cmd.X_out = 0.0;
-                    cmd.Y_out = 0.4;
-                    cmd.Z_out = -1.0*Kp_z*(2.15 - height_m*cos(fabs(StrRXttyO.Cur_Att_deg[1])*D2R));
-                    cmd.PSI_out = 0.0;
-                    flag_gate_init = 1;
-                }
-
-                else flag_gate_init = 0;
-            }
-
-            if (gate_num == 3 )
-            {
-                count_adhoc = count_adhoc + 1;
-
-                if(count_adhoc < (_FORWARD)*SECOND)
-                {
-                    cout << "!!!!!!!!moving forward!!!!!!!" << "\n";
+                    cout << "----------------move left------------" << "\n";
                     cmd.X_out = 0.0;
                     cmd.Y_out = 0.4;
                     cmd.Z_out = -1.0*Kp_z*(2.65 - height_m*cos(fabs(StrRXttyO.Cur_Att_deg[1])*D2R));
@@ -339,9 +323,9 @@ int main(int argc, char** argv)
                     flag_gate_init = 1;
                 }
 
-                else if(count_adhoc > (_FORWARD)*SECOND && count_adhoc < (_FORWARD+2)*SECOND)
+		if(count_adhoc > (_FORWARD-2.5)*SECOND && count_adhoc < (_FORWARD-1.0)*SECOND)
                 {
-                    cout << "!!!!!!!!moving forward!!!!!!!" << "\n";
+                    cout << "----------------move left------------" << "\n";
                     cmd.X_out = 0.0;
                     cmd.Y_out = 0.0;
                     cmd.Z_out = -1.0*Kp_z*(2.65 - height_m*cos(fabs(StrRXttyO.Cur_Att_deg[1])*D2R));
@@ -350,24 +334,17 @@ int main(int argc, char** argv)
                 }
 
                 else flag_gate_init = 0;
-            }
+            }         
 
-            if (gate_num == 6 )
+            if (gate_num == 9 )
             {
-                count_adhoc = count_adhoc + 1;
-
-                if(count_adhoc < (_FORWARD-2)*SECOND)
-                {
-                    cout << "!!!!!!!!moving forward!!!!!!!" << "\n";
-                    cmd.X_out = 0.0;
-                    cmd.Y_out = 0.4;
-                    cmd.Z_out = -1.0*Kp_z*(2.15 - height_m*cos(fabs(StrRXttyO.Cur_Att_deg[1])*D2R));
-                    cmd.PSI_out = 0.0;
-                    flag_gate_init = 1;
-                }
-
-                else flag_gate_init = 0;
-            }
+                cout << "----------------move left------------" << "\n";
+                cmd.X_out = 0.0;
+                cmd.Y_out = 0.0;
+                cmd.Z_out = -1.0*Kp_z*(1.65 - height_m*cos(fabs(StrRXttyO.Cur_Att_deg[1])*D2R));
+                cmd.PSI_out = 0.0;
+                flag_gate_init = 1;               
+            }    
 /// ---------------------------------------Guidance Command----------------------------------------------------------
             if (flag_gate_init == 0)
             {
